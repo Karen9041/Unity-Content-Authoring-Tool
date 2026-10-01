@@ -45,7 +45,10 @@ public class PetEditorWindow : EditorWindow
                     continue;
                 
                 rightPane.Add(new Label($"ID: {pet.Id}"));
-                rightPane.Add(new Label($"Name: {pet.DisplayName}"));
+
+                string displayName = string.IsNullOrWhiteSpace(pet.DisplayName) ? pet.name : pet.DisplayName;
+                rightPane.Add(new Label($"Name: {displayName}"));
+                
                 rightPane.Add(new ObjectField("Icon")
                 {
                    objectType = typeof(Sprite),
@@ -60,6 +63,7 @@ public class PetEditorWindow : EditorWindow
             }
         };
 
+        leftPane.Add(new Label($"Pets: {pets.Count}"));
         leftPane.Add(listView);
 
         splitView.Add(leftPane);
