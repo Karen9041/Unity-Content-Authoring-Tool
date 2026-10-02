@@ -7,6 +7,9 @@ using UnityEditor.UIElements;
 public class PetEditorWindow : EditorWindow
 {
     private List<PetData> pets = new();
+    private PetData selectedPet;
+    private VisualElement rightPane;
+
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
     public static void Open()
@@ -19,9 +22,8 @@ public class PetEditorWindow : EditorWindow
         RefreshPetList();
 
         var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
-
         var leftPane = new VisualElement();
-        var rightPane = new VisualElement();
+        rightPane = new VisualElement();
 
         var listView = new ListView
         {
@@ -37,29 +39,13 @@ public class PetEditorWindow : EditorWindow
 
         listView.selectionChanged += selection =>
         {
-            rightPane.Clear();
-
             foreach(var item in selection)
             {
                 if(item is not PetData pet)
                     continue;
                 
-                rightPane.Add(new Label($"ID: {pet.Id}"));
-
-                string displayName = string.IsNullOrWhiteSpace(pet.DisplayName) ? pet.name : pet.DisplayName;
-                rightPane.Add(new Label($"Name: {displayName}"));
-                
-                rightPane.Add(new ObjectField("Icon")
-                {
-                   objectType = typeof(Sprite),
-                   value = pet.Icon 
-                });
-
-                rightPane.Add(new ObjectField("Prefab")
-                {
-                    objectType = typeof(GameObject),
-                    value = pet.Prefab
-                });
+                selectedPet = pet;
+                ShowPet(selectedPet);
             }
         };
 
@@ -90,5 +76,89 @@ public class PetEditorWindow : EditorWindow
         }
 
         Debug.Log($"Found {pets.Count} PetData assets.");
+    }
+
+    private void ShowPet(PetData pet)
+    {
+        rightPane.Clear();
+
+        var serializedPet = new SerializedObject(pet);
+
+        SerializedProperty idProperty = serializedPet.FindProperty("id");
+        SerializedProperty displayNameProperty = serializedPet.FindProperty("displayName");
+        SerializedProperty iconProperty = serializedPet.FindProperty("icon");
+        SerializedProperty prefabProperty = serializedPet.FindProperty("prefab");
+
+        var idField = new TextField("ID")
+        {
+            value = idProperty.stringValue
+        };
+
+        var displayNameField = new TextField("Display Name")
+        {
+            value = displayNameProperty.stringValue
+        };
+
+        var iconField = new ObjectField("Icon")
+        {
+            objectType = typeof(Sprite),
+            value = iconProperty.objectReferenceValue
+        };
+
+        var prefabField = new ObjectField("Prefab")
+        {
+            objectType = typeof(GameObject),
+            value = prefabProperty.objectReferenceValue
+        };
+
+        rightPane.Add(idField);
+        rightPane.Add(displayNameField);
+        rightPane.Add(iconField);
+        rightPane.Add(prefabField);
+
+        idField.RegisterValueChangedCallback(evt =>
+        {
+            serializedPet.Update();
+            idProperty.stringValue = evt.newValue;
+            serializedPet.ApplyModifiedProperties();
+        });
+        
+        displayNameField.RegisterValueChangedCallback(evt =>
+        {
+            serializedPet.Update();
+            displayNameProperty.stringValue = evt.newValue;
+            serializedPet.ApplyModifiedProperties();
+        });
+
+        iconField.RegisterValueChangedCallback(evt =>
+        {
+            serializedPet.Update();
+            iconProperty.objectReferenceValue = evt.newValue;
+            serializedPet.ApplyModifiedProperties();
+        });
+
+        prefabField.RegisterValueChangedCallback(evt =>
+        {
+            serializedPet.Update();
+            prefabProperty.objectReferenceValue = evt.newValue;
+            serializedPet.ApplyModifiedProperties();
+        });
+    }
+
+    private void OnEnable()
+    {
+        Undo.undoRedoPerformed += OnUndoRedo;
+    }
+
+    private void OnDisable()
+    {
+        Undo.undoRedoPerformed -= OnUndoRedo;
+    }
+
+    private void OnUndoRedo()
+    {
+        if(selectedPet == null)
+            return;
+        ShowPet(selectedPet);
     }
 }
