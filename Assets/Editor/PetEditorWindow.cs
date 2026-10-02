@@ -9,6 +9,7 @@ public class PetEditorWindow : EditorWindow
     private List<PetData> pets = new();
     private PetData selectedPet;
     private VisualElement rightPane;
+    private VisualElement validationContainer;
 
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
@@ -24,6 +25,7 @@ public class PetEditorWindow : EditorWindow
         var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
         var leftPane = new VisualElement();
         rightPane = new VisualElement();
+        validationContainer = new VisualElement();
 
         var listView = new ListView
         {
@@ -84,23 +86,39 @@ public class PetEditorWindow : EditorWindow
 
         var serializedPet = new SerializedObject(pet);
 
-        rightPane.Add(
-            new PropertyField(serializedPet.FindProperty("id"))
-        );
-
+        PropertyField idField = new PropertyField(serializedPet.FindProperty("id"));
+        rightPane.Add(idField);
+        
         rightPane.Add(
             new PropertyField(serializedPet.FindProperty("displayName"))
         );
 
-        rightPane.Add(
-            new PropertyField(serializedPet.FindProperty("icon"))
-        );
+        PropertyField iconField = new PropertyField(serializedPet.FindProperty("icon"));
+        rightPane.Add(iconField);
 
-        rightPane.Add(
-            new PropertyField(serializedPet.FindProperty("prefab"))
-        );
-
+        PropertyField prefabField = new PropertyField(serializedPet.FindProperty("prefab"));
+        rightPane.Add(prefabField);
+    
         rightPane.Bind(serializedPet);
+
+        rightPane.Add(validationContainer);
+
+        RefreshValidation(pet);
+
+        idField.RegisterValueChangeCallback(evt =>
+        {
+            RefreshValidation(pet);
+        });
+
+        iconField.RegisterValueChangeCallback(evt =>
+        {
+            RefreshValidation(pet);
+        });
+
+        prefabField.RegisterValueChangeCallback(evt =>
+        {
+            RefreshValidation(pet);
+        });
     }
 
     private void OnEnable()
@@ -119,4 +137,106 @@ public class PetEditorWindow : EditorWindow
             return;
         ShowPet(selectedPet);
     }
+
+#region Validation 
+
+    private bool IsIdMissing(PetData selectedPet)
+    {
+        return string.IsNullOrWhiteSpace(selectedPet?.Id);
+    }
+
+    private bool HasDuplicateId(PetData selectedPet)
+    {
+        if (string.IsNullOrWhiteSpace(selectedPet?.Id))
+            return false;
+        foreach(var pet in pets)
+        {
+            if(pet != selectedPet && pet.Id == selectedPet.Id)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private bool IsPrefabMissing(PetData selectedPet)
+    {
+        return selectedPet?.Prefab == null;
+    }
+
+    private bool IsIconMissing(PetData selectedPet)
+    {
+        return selectedPet?.Icon == null;
+    }
+
+    public enum ValidationSeverity
+    {
+        Warning,
+        Error
+    }
+
+    public class ValidationResult
+    {
+        public ValidationSeverity Severity;
+        public string Message;
+    }
+
+    public List<ValidationResult> ValidatePet(PetData selectedPet)
+    {
+        var results = new List<ValidationResult>();
+
+        if(IsIdMissing(selectedPet))
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "ID is required."
+            });
+        }
+
+        if(HasDuplicateId(selectedPet))
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Duplicate ID found."
+            });
+        }
+
+        if(IsPrefabMissing(selectedPet))
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Prefab is required."
+            });
+        }
+
+        if(IsIconMissing(selectedPet))
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Warning,
+                Message = "Icon is missing."
+            });
+        }
+
+        return results;
+    }
+
+    private void RefreshValidation(PetData pet)
+    {
+        validationContainer.Clear();
+        var validationResults = ValidatePet(pet);
+        foreach(var result in validationResults)
+        {
+            validationContainer.Add(
+                new Label($"[{result.Severity}] {result.Message}")
+            );
+        }
+    }
+
+#endregion
+
 }
+
