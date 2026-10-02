@@ -84,65 +84,23 @@ public class PetEditorWindow : EditorWindow
 
         var serializedPet = new SerializedObject(pet);
 
-        SerializedProperty idProperty = serializedPet.FindProperty("id");
-        SerializedProperty displayNameProperty = serializedPet.FindProperty("displayName");
-        SerializedProperty iconProperty = serializedPet.FindProperty("icon");
-        SerializedProperty prefabProperty = serializedPet.FindProperty("prefab");
+        rightPane.Add(
+            new PropertyField(serializedPet.FindProperty("id"))
+        );
 
-        var idField = new TextField("ID")
-        {
-            value = idProperty.stringValue
-        };
+        rightPane.Add(
+            new PropertyField(serializedPet.FindProperty("displayName"))
+        );
 
-        var displayNameField = new TextField("Display Name")
-        {
-            value = displayNameProperty.stringValue
-        };
+        rightPane.Add(
+            new PropertyField(serializedPet.FindProperty("icon"))
+        );
 
-        var iconField = new ObjectField("Icon")
-        {
-            objectType = typeof(Sprite),
-            value = iconProperty.objectReferenceValue
-        };
+        rightPane.Add(
+            new PropertyField(serializedPet.FindProperty("prefab"))
+        );
 
-        var prefabField = new ObjectField("Prefab")
-        {
-            objectType = typeof(GameObject),
-            value = prefabProperty.objectReferenceValue
-        };
-
-        rightPane.Add(idField);
-        rightPane.Add(displayNameField);
-        rightPane.Add(iconField);
-        rightPane.Add(prefabField);
-
-        idField.RegisterValueChangedCallback(evt =>
-        {
-            serializedPet.Update();
-            idProperty.stringValue = evt.newValue;
-            serializedPet.ApplyModifiedProperties();
-        });
-        
-        displayNameField.RegisterValueChangedCallback(evt =>
-        {
-            serializedPet.Update();
-            displayNameProperty.stringValue = evt.newValue;
-            serializedPet.ApplyModifiedProperties();
-        });
-
-        iconField.RegisterValueChangedCallback(evt =>
-        {
-            serializedPet.Update();
-            iconProperty.objectReferenceValue = evt.newValue;
-            serializedPet.ApplyModifiedProperties();
-        });
-
-        prefabField.RegisterValueChangedCallback(evt =>
-        {
-            serializedPet.Update();
-            prefabProperty.objectReferenceValue = evt.newValue;
-            serializedPet.ApplyModifiedProperties();
-        });
+        rightPane.Bind(serializedPet);
     }
 
     private void OnEnable()
