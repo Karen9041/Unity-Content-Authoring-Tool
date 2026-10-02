@@ -135,7 +135,9 @@ public class PetEditorWindow : EditorWindow
     {
         if(selectedPet == null)
             return;
-        ShowPet(selectedPet);
+            
+        // Validation is derived state
+        RefreshValidation(selectedPet);
     }
 
 #region Validation 
@@ -143,20 +145,6 @@ public class PetEditorWindow : EditorWindow
     private bool IsIdMissing(PetData selectedPet)
     {
         return string.IsNullOrWhiteSpace(selectedPet?.Id);
-    }
-
-    private bool HasDuplicateId(PetData selectedPet)
-    {
-        if (string.IsNullOrWhiteSpace(selectedPet?.Id))
-            return false;
-        foreach(var pet in pets)
-        {
-            if(pet != selectedPet && pet.Id == selectedPet.Id)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     private bool IsPrefabMissing(PetData selectedPet)
@@ -167,6 +155,23 @@ public class PetEditorWindow : EditorWindow
     private bool IsIconMissing(PetData selectedPet)
     {
         return selectedPet?.Icon == null;
+    }
+
+    private List<PetData> FindDuplicateIdPets(PetData selectedPet)
+    {
+        var duplicates = new List<PetData>();
+        if(string.IsNullOrWhiteSpace(selectedPet?.Id))
+            return duplicates;
+
+        foreach(var pet in pets)
+        {
+            if(pet != selectedPet && pet.Id == selectedPet.Id)
+            {
+                duplicates.Add(pet);
+            }
+        }
+
+        return duplicates;
     }
 
     public enum ValidationSeverity
@@ -194,15 +199,6 @@ public class PetEditorWindow : EditorWindow
             });
         }
 
-        if(HasDuplicateId(selectedPet))
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Duplicate ID found."
-            });
-        }
-
         if(IsPrefabMissing(selectedPet))
         {
             results.Add(new ValidationResult
@@ -218,6 +214,17 @@ public class PetEditorWindow : EditorWindow
             {
                 Severity = ValidationSeverity.Warning,
                 Message = "Icon is missing."
+            });
+        }
+
+        var duplicatePets = FindDuplicateIdPets(selectedPet);
+
+        foreach(var duplicate in duplicatePets)
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = $"ID '{selectedPet.Id}' is also used by '{duplicate.name}'."
             });
         }
 
