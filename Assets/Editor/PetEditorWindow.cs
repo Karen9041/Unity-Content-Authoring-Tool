@@ -10,6 +10,8 @@ public class PetEditorWindow : EditorWindow
     private PetData selectedPet;
     private VisualElement rightPane;
     private VisualElement validationContainer;
+    private ListView listView;
+    private readonly Dictionary<PetData, List<ValidationResult>> validationCache = new();
 
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
@@ -27,13 +29,39 @@ public class PetEditorWindow : EditorWindow
         rightPane = new VisualElement();
         validationContainer = new VisualElement();
 
-        var listView = new ListView
+        listView = new ListView
         {
             itemsSource = pets,
             makeItem = () => new Label(),
             bindItem = (element, index) =>
             {
                 var label = (Label)element;
+                var pet = pets[index];
+
+                if(!validationCache.TryGetValue(pet, out var results))
+                {
+                    results = new List<ValidationResult>();
+                }
+
+                if (results != null && results.Count > 0)
+                {
+                    var highestSeverity = ValidationSeverity.Warning;
+                    foreach (var result in results)
+                    {
+                        if (result.Severity == ValidationSeverity.Error)
+                        {
+                            highestSeverity = ValidationSeverity.Error;
+                            break;
+                        }
+                    }
+
+                    label.style.color = highestSeverity == ValidationSeverity.Error ? Color.red : Color.yellow;
+                }
+                else
+                {
+                    label.style.color = Color.white;
+                }
+                
                 label.text = pets[index].DisplayName;
             },
             selectionType = SelectionType.Single
@@ -76,6 +104,8 @@ public class PetEditorWindow : EditorWindow
                 pets.Add(pet);
             }
         }
+
+        ValidateAllPets();
     }
 
     private void ShowPet(PetData pet)
@@ -87,9 +117,8 @@ public class PetEditorWindow : EditorWindow
         PropertyField idField = new PropertyField(serializedPet.FindProperty("id"));
         rightPane.Add(idField);
         
-        rightPane.Add(
-            new PropertyField(serializedPet.FindProperty("displayName"))
-        );
+        PropertyField displayNameField = new PropertyField(serializedPet.FindProperty("displayName"));
+        rightPane.Add(displayNameField);
 
         PropertyField iconField = new PropertyField(serializedPet.FindProperty("icon"));
         rightPane.Add(iconField);
@@ -105,16 +134,39 @@ public class PetEditorWindow : EditorWindow
 
         idField.RegisterValueChangeCallback(evt =>
         {
+            ValidateAllPets();
+            listView.RefreshItems();
             RefreshValidation(pet);
+        });
+
+        displayNameField.RegisterValueChangeCallback(evt =>
+        {
+            int index = pets.IndexOf(pet);
+            if(index >= 0)
+            {
+                listView.RefreshItem(index);
+            }
         });
 
         iconField.RegisterValueChangeCallback(evt =>
         {
+            ValidatePetAndUpdateCache(pet);
+            int index = pets.IndexOf(pet);
+            if(index >= 0)
+            {
+                listView.RefreshItem(index);
+            }
             RefreshValidation(pet);
         });
 
         prefabField.RegisterValueChangeCallback(evt =>
         {
+            ValidatePetAndUpdateCache(pet);
+            int index = pets.IndexOf(pet);
+            if(index >= 0)
+            {
+                listView.RefreshItem(index);
+            }
             RefreshValidation(pet);
         });
     }
@@ -133,8 +185,10 @@ public class PetEditorWindow : EditorWindow
     {
         if(selectedPet == null)
             return;
-            
+
         // Validation is derived state
+        ValidateAllPets();
+        listView.RefreshItems();
         RefreshValidation(selectedPet);
     }
 
@@ -238,6 +292,21 @@ public class PetEditorWindow : EditorWindow
             validationContainer.Add(
                 new Label($"[{result.Severity}] {result.Message}")
             );
+        }
+    }
+
+    private void ValidatePetAndUpdateCache(PetData pet)
+    {
+        validationCache[pet] = ValidatePet(pet);
+    }
+
+    private void ValidateAllPets()
+    {
+        validationCache.Clear();
+
+        foreach(var pet in pets)
+        {
+            ValidatePetAndUpdateCache(pet);
         }
     }
 
