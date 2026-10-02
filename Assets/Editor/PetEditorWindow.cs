@@ -76,8 +76,6 @@ public class PetEditorWindow : EditorWindow
                 pets.Add(pet);
             }
         }
-
-        Debug.Log($"Found {pets.Count} PetData assets.");
     }
 
     private void ShowPet(PetData pet)
