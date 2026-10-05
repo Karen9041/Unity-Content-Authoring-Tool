@@ -16,7 +16,7 @@ public class PetEditorWindow : EditorWindow
     private Image iconPreview;
     private Image PrefabPreview;
     private PetData previewPet;
-
+    private const string PetArtRoot = "Assets/Game/Arts/Pets";
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
     public static void Open()
@@ -90,6 +90,11 @@ public class PetEditorWindow : EditorWindow
         splitView.Add(rightPane);
 
         rootVisualElement.Add(splitView);
+
+        foreach(PetArtCandidate candidate in ScanPetArtCandidates())
+        {
+            Debug.Log(candidate.FolderPath + candidate.Prefabs.Count + candidate.Icons.Count);
+        }
     }
 
     private void RefreshPetList()
@@ -425,5 +430,119 @@ public class PetEditorWindow : EditorWindow
 
 #endregion
 
+#region Scanner
+
+    public class PetArtCandidate
+    {
+        public string FolderPath;
+        public List<GameObject> Prefabs = new();
+        public List<Sprite> Icons = new();
+    }
+
+    private List<GameObject> FindPetPrefabs()
+    {
+        var results = new List<GameObject>();
+
+        string[] guids = AssetDatabase.FindAssets(
+            "t:Prefab",
+            new[] {PetArtRoot});
+        
+        foreach(string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+
+            if(prefab != null)
+            {
+                results.Add(prefab);
+            }
+        }
+
+        return results;
+    }
+
+    private List<Sprite> FindPetIcons()
+    {
+        var results = new List<Sprite>();
+
+        string[] guids = AssetDatabase.FindAssets(
+            "t:Sprite",
+            new[] {PetArtRoot});
+
+        foreach(string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+
+            if(sprite != null)
+            {
+                results.Add(sprite);
+            }
+        }
+
+        return results;
+    }
+
+    private List<PetArtCandidate> ScanPetArtCandidates()
+    {
+        var candidatesByFolder = new Dictionary<string, PetArtCandidate>();
+
+        foreach(string folder in AssetDatabase.GetSubFolders(PetArtRoot))
+        {
+            candidatesByFolder[folder] = new PetArtCandidate
+            {
+                FolderPath = folder
+            };
+        }
+
+        foreach(GameObject prefab in FindPetPrefabs())
+        {
+            string path = AssetDatabase.GetAssetPath(prefab);
+            string folder = GetPetRootFolder(path);
+
+            if(folder != null && candidatesByFolder.TryGetValue(folder, out var candidate))
+            {
+                candidate.Prefabs.Add(prefab);
+            }
+        }
+
+        foreach(Sprite icon in FindPetIcons())
+        {
+            string path = AssetDatabase.GetAssetPath(icon);
+            string folder = GetPetRootFolder(path);
+
+            if(folder != null && candidatesByFolder.TryGetValue(folder, out var candidate))
+            {
+                candidate.Icons.Add(icon);
+            }
+        }
+
+        return new List<PetArtCandidate>(candidatesByFolder.Values);
+    }
+
+    private string GetPetRootFolder(string assetPath)
+    {
+        string prefix = PetArtRoot.TrimEnd('/') + "/";
+
+        if (!assetPath.StartsWith(prefix))
+            return null;
+
+        string relativePath =
+            assetPath.Substring(prefix.Length);
+
+        int slashIndex = relativePath.IndexOf('/');
+
+        if (slashIndex < 0)
+            return null;
+
+        string petFolderName =
+            relativePath.Substring(0, slashIndex);
+
+        return prefix + petFolderName;
+    }
+
+#endregion
 }
 
