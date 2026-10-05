@@ -13,6 +13,9 @@ public class PetEditorWindow : EditorWindow
     private ListView listView;
     private readonly Dictionary<PetData, List<ValidationResult>> validationCache = new();
     private readonly Dictionary<string, List<PetData>> petsById = new();
+    private Image iconPreview;
+    private Image PrefabPreview;
+    private PetData previewPet;
 
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
@@ -124,9 +127,41 @@ public class PetEditorWindow : EditorWindow
         PropertyField iconField = new PropertyField(serializedPet.FindProperty("icon"));
         rightPane.Add(iconField);
 
+        iconPreview = new Image
+        {
+          scaleMode = ScaleMode.ScaleToFit,  
+        };
+
+        iconPreview.style.width = 128;
+        iconPreview.style.height = 128;
+        iconPreview.image = pet.Icon != null? pet.Icon.texture : null;
+
+        var iconPreviewContainer = new VisualElement();
+        iconPreviewContainer.Add(iconPreview);
+        iconPreviewContainer.style.flexDirection = FlexDirection.Row;
+        iconPreviewContainer.style.justifyContent = Justify.FlexEnd;        
+
+        rightPane.Add(iconPreviewContainer);
+
         PropertyField prefabField = new PropertyField(serializedPet.FindProperty("prefab"));
         rightPane.Add(prefabField);
-    
+
+        PrefabPreview = new Image
+        {
+            scaleMode = ScaleMode.ScaleToFit,
+        };
+
+        PrefabPreview.style.width = 160;
+        PrefabPreview.style.height = 160;
+        RefreshPrefabPreview(pet);
+
+        var prefabPreviewContainer = new VisualElement();
+        prefabPreviewContainer.Add(PrefabPreview);
+        prefabPreviewContainer.style.flexDirection = FlexDirection.Row;
+        prefabPreviewContainer.style.justifyContent = Justify.FlexEnd;
+
+        rightPane.Add(prefabPreviewContainer);
+
         rightPane.Bind(serializedPet);
 
         rightPane.Add(validationContainer);
@@ -151,6 +186,8 @@ public class PetEditorWindow : EditorWindow
 
         iconField.RegisterValueChangeCallback(evt =>
         {
+            iconPreview.image = pet.Icon != null? pet.Icon.texture : null;
+
             ValidatePetAndUpdateCache(pet);
             int index = pets.IndexOf(pet);
             if(index >= 0)
@@ -162,6 +199,8 @@ public class PetEditorWindow : EditorWindow
 
         prefabField.RegisterValueChangeCallback(evt =>
         {
+            RefreshPrefabPreview(pet);
+
             ValidatePetAndUpdateCache(pet);
             int index = pets.IndexOf(pet);
             if(index >= 0)
@@ -191,6 +230,53 @@ public class PetEditorWindow : EditorWindow
         }
     }
 
+    private void RefreshPrefabPreview(PetData pet)
+    {
+        previewPet = pet;
+
+        if(pet == null || pet.Prefab == null)
+        {
+            PrefabPreview.image = null;
+            EditorApplication.update -= PollPrefabPreview;
+            return;
+        }
+
+        var prefabTexture = AssetPreview.GetAssetPreview(pet.Prefab);
+        if(prefabTexture != null)
+        {
+            PrefabPreview.image = prefabTexture;
+            EditorApplication.update -= PollPrefabPreview;
+            return;
+        }
+
+        EditorApplication.update += PollPrefabPreview;
+        EditorApplication.update -= PollPrefabPreview;
+    }
+
+    private void PollPrefabPreview()
+    {
+        if(previewPet == null || previewPet.Prefab == null)
+        {
+            EditorApplication.update -= PollPrefabPreview;
+            return;
+        }
+
+        if(previewPet != selectedPet)
+        {
+            EditorApplication.update -= PollPrefabPreview;
+            return;
+        }
+
+        var prefabTexture = AssetPreview.GetAssetPreview(previewPet.Prefab);
+        if(prefabTexture == null)
+            return;
+
+        PrefabPreview.image = prefabTexture;
+        EditorApplication.update -= PollPrefabPreview;
+        
+        Repaint();
+    }
+
     private void OnEnable()
     {
         Undo.undoRedoPerformed += OnUndoRedo;
@@ -199,6 +285,7 @@ public class PetEditorWindow : EditorWindow
     private void OnDisable()
     {
         Undo.undoRedoPerformed -= OnUndoRedo;
+        EditorApplication.update -= PollPrefabPreview;
     }
 
     private void OnUndoRedo()
