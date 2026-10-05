@@ -12,6 +12,7 @@ public class PetEditorWindow : EditorWindow
     private VisualElement validationContainer;
     private ListView listView;
     private readonly Dictionary<PetData, List<ValidationResult>> validationCache = new();
+    private readonly Dictionary<string, List<PetData>> petsById = new();
 
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
@@ -171,6 +172,25 @@ public class PetEditorWindow : EditorWindow
         });
     }
 
+    private void BuildPetInIndex()
+    {
+        petsById.Clear();
+
+        foreach(var pet in pets)
+        {
+            if(string.IsNullOrWhiteSpace(pet.Id))
+                continue;
+
+            if(!petsById.TryGetValue(pet.Id, out var sameIdPets))
+            {
+                sameIdPets = new List<PetData>();
+                petsById.Add(pet.Id, sameIdPets);
+            }
+
+            sameIdPets.Add(pet);
+        }
+    }
+
     private void OnEnable()
     {
         Undo.undoRedoPerformed += OnUndoRedo;
@@ -211,13 +231,17 @@ public class PetEditorWindow : EditorWindow
 
     private List<PetData> FindDuplicateIdPets(PetData selectedPet)
     {
-        var duplicates = new List<PetData>();
         if(string.IsNullOrWhiteSpace(selectedPet?.Id))
-            return duplicates;
+            return new List<PetData>();
 
-        foreach(var pet in pets)
+        if(!petsById.TryGetValue(selectedPet.Id, out var sameIdPets))
+            return new List<PetData>();
+
+        var duplicates = new List<PetData>();
+
+        foreach(var pet in sameIdPets)
         {
-            if(pet != selectedPet && pet.Id == selectedPet.Id)
+            if(pet != selectedPet)
             {
                 duplicates.Add(pet);
             }
@@ -303,6 +327,8 @@ public class PetEditorWindow : EditorWindow
     private void ValidateAllPets()
     {
         validationCache.Clear();
+
+        BuildPetInIndex();
 
         foreach(var pet in pets)
         {
