@@ -8,15 +8,35 @@ public class PetEditorWindow : EditorWindow
 {
     private List<PetData> pets = new();
     private PetData selectedPet;
+
+    private enum EditorMode
+    {
+        Content,
+        ArtAssets
+    }
+
+    private EditorMode currentMode = EditorMode.Content;
+
+    private VisualElement contentView;
+    private VisualElement artAssetsView;
+
     private VisualElement rightPane;
-    private VisualElement validationContainer;
+    private VisualElement artRightPane;
+
     private ListView listView;
+    private ListView artCandidateListView;
+
+    private VisualElement contentValidationContainer;
+    private VisualElement artValidationContainer;
+
     private readonly Dictionary<PetData, List<ValidationResult>> validationCache = new();
     private readonly Dictionary<string, List<PetData>> petsById = new();
     private Image iconPreview;
     private Image PrefabPreview;
     private PetData previewPet;
     private const string PetArtRoot = "Assets/Game/Arts/Pets";
+    private List<PetArtCandidate> artCandidates = new();
+    
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
     public static void Open()
@@ -27,11 +47,53 @@ public class PetEditorWindow : EditorWindow
     public void CreateGUI()
     {
         RefreshPetList();
+        RefreshArtCandidates();
+
+        BuildToolbar();
+        BuildContentView();
+        BuildArtAssetsView();
+
+        SwitchMode(EditorMode.Content);
+    }
+
+    private void BuildToolbar()
+    {
+        var toolbar = new VisualElement();
+
+        toolbar.style.flexDirection = FlexDirection.Row;
+
+        var contentButton = new Button(() =>
+        {
+            SwitchMode(EditorMode.Content);
+        })
+        {
+            text = "Content"
+        };
+
+        var artAssetsButton = new Button(() =>
+        {
+            SwitchMode(EditorMode.ArtAssets);
+        })
+        {
+            text = "Art Assets"
+        };
+
+        toolbar.Add(contentButton);
+        toolbar.Add(artAssetsButton);
+
+        rootVisualElement.Add(toolbar);
+    }
+
+    private void BuildContentView()
+    {
+        contentView = new VisualElement();
 
         var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
+
         var leftPane = new VisualElement();
         rightPane = new VisualElement();
-        validationContainer = new VisualElement();
+
+        contentValidationContainer = new VisualElement();
 
         listView = new ListView
         {
@@ -89,12 +151,102 @@ public class PetEditorWindow : EditorWindow
         splitView.Add(leftPane);
         splitView.Add(rightPane);
 
-        rootVisualElement.Add(splitView);
+        contentView.Add(splitView);
 
-        foreach(PetArtCandidate candidate in ScanPetArtCandidates())
+        rootVisualElement.Add(contentView);
+    }
+
+    private void BuildArtAssetsView()
+    {
+        artAssetsView = new VisualElement();
+
+        var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
+
+        var leftPane = new VisualElement();
+        artRightPane = new VisualElement();
+
+        artValidationContainer = new VisualElement();
+
+        artCandidateListView = new ListView
         {
-            Debug.Log(candidate.FolderPath + candidate.Prefabs.Count + candidate.Icons.Count);
-        }
+            itemsSource = artCandidates,
+
+            makeItem = () => new Label(),
+
+            bindItem = (element, index) =>
+            {
+                var label = (Label)element;
+                var candidate = artCandidates[index];
+
+                var validation =
+                    ValidateArtCandidate(candidate);
+
+                string folderName =
+                    System.IO.Path.GetFileName(
+                        candidate.FolderPath);
+
+                bool hasError = validation.Exists(
+                    r => r.Severity == ValidationSeverity.Error);
+
+                bool hasWarning = validation.Exists(
+                    r => r.Severity == ValidationSeverity.Warning);
+
+                string prefix =
+                    hasError ? "✕" :
+                    hasWarning ? "⚠" :
+                    "✓";
+
+                label.text =
+                    $"{prefix} {folderName}";
+            },
+
+            selectionType = SelectionType.Single
+        };
+
+        artCandidateListView.selectionChanged += selection =>
+        {
+            foreach (var item in selection)
+            {
+                if (item is not PetArtCandidate candidate)
+                    continue;
+
+                ShowArtCandidate(candidate);
+            }
+        };
+
+        leftPane.Add(new Label($"Art Candidates: {artCandidates.Count}"));
+        leftPane.Add(artCandidateListView);
+
+        splitView.Add(leftPane);
+        splitView.Add(artRightPane);
+
+        artAssetsView.Add(splitView);
+
+        rootVisualElement.Add(artAssetsView);
+    }
+
+    private void ShowArtCandidate(PetArtCandidate candidate)
+    {
+        artRightPane.Clear();
+
+        artRightPane.Add(
+            new Label(candidate.FolderPath)
+        );
+    }
+
+    private void SwitchMode(EditorMode mode)
+    {
+        currentMode = mode;
+
+        contentView.style.display =
+            mode == EditorMode.Content
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+
+        artAssetsView.style.display =
+            mode == EditorMode.ArtAssets
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
     }
 
     private void RefreshPetList()
@@ -169,7 +321,7 @@ public class PetEditorWindow : EditorWindow
 
         rightPane.Bind(serializedPet);
 
-        rightPane.Add(validationContainer);
+        rightPane.Add(contentValidationContainer);
 
         RefreshValidation(pet);
 
@@ -401,11 +553,12 @@ public class PetEditorWindow : EditorWindow
 
     private void RefreshValidation(PetData pet)
     {
-        validationContainer.Clear();
+        contentValidationContainer.Clear();
+        contentValidationContainer.Add(new Label("Validation"));
         var validationResults = ValidatePet(pet);
         foreach(var result in validationResults)
         {
-            validationContainer.Add(
+            contentValidationContainer.Add(
                 new Label($"[{result.Severity}] {result.Message}")
             );
         }
@@ -426,6 +579,43 @@ public class PetEditorWindow : EditorWindow
         {
             ValidatePetAndUpdateCache(pet);
         }
+    }
+
+    private List<ValidationResult> ValidateArtCandidate(PetArtCandidate candidate)
+    {
+        var results = new List<ValidationResult>();
+
+        if(candidate.Prefabs.Count == 0)
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Prefab is missing"
+            });
+        }else if(candidate.Prefabs.Count > 1){
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = $"Multiple prefabs found ({candidate.Prefabs.Count})."
+            });
+        }
+
+        if(candidate.Icons.Count == 0)
+        {
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Icon is missing"
+            });
+        }else if(candidate.Icons.Count > 1){
+            results.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = $"Multiple Icons found ({candidate.Icons.Count})."
+            });
+        }
+
+        return results;
     }
 
 #endregion
@@ -485,8 +675,10 @@ public class PetEditorWindow : EditorWindow
         return results;
     }
 
-    private List<PetArtCandidate> ScanPetArtCandidates()
+    private void RefreshArtCandidates()
     {
+        artCandidates.Clear();
+
         var candidatesByFolder = new Dictionary<string, PetArtCandidate>();
 
         foreach(string folder in AssetDatabase.GetSubFolders(PetArtRoot))
@@ -519,7 +711,7 @@ public class PetEditorWindow : EditorWindow
             }
         }
 
-        return new List<PetArtCandidate>(candidatesByFolder.Values);
+        artCandidates = new List<PetArtCandidate>(candidatesByFolder.Values);
     }
 
     private string GetPetRootFolder(string assetPath)
