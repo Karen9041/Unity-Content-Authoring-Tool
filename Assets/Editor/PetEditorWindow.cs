@@ -7,6 +7,8 @@ using UnityEditor.UIElements;
 public class PetEditorWindow : EditorWindow
 {
     private List<PetData> pets = new();
+    private List<ContentDefinition> contents = new();
+    private IContentSource contentSource;
     private PetData selectedPet;
 
     private enum EditorMode
@@ -46,6 +48,10 @@ public class PetEditorWindow : EditorWindow
 
     public void CreateGUI()
     {
+        contentSource = new ScriptableObjectContentSource();
+
+        RefreshContentList();
+
         RefreshPetList();
         RefreshArtCandidates();
 
@@ -247,6 +253,26 @@ public class PetEditorWindow : EditorWindow
             mode == EditorMode.ArtAssets
                 ? DisplayStyle.Flex
                 : DisplayStyle.None;
+    }
+
+    private void RefreshContentList()
+    {
+        contents.Clear();
+
+        var loaded =
+            contentSource.Load();
+
+        contents.AddRange(loaded);
+
+        foreach (var content in contents)
+        {
+            Debug.Log(
+                $"{content.Id} | " +
+                $"{content.Name} | " +
+                $"{content.PrefabKey} | " +
+                $"{content.IconKey}"
+            );
+        }
     }
 
     private void RefreshPetList()
