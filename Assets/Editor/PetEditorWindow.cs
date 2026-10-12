@@ -10,6 +10,7 @@ public class PetEditorWindow : EditorWindow
     private List<ContentRecord> contents = new();
     private IContentSource contentSource;
     private PetData selectedPet;
+    private ContentRecord selectedContent;
 
     private enum EditorMode
     {
@@ -84,10 +85,48 @@ public class PetEditorWindow : EditorWindow
             text = "Art Assets"
         };
 
+        var soSourceButton = new Button(() =>
+        {
+            SetContentSource(
+                new ScriptableObjectContentSource()
+            );
+        })
+        {
+            text = "SO Source"
+        };
+
+        var fakeSourceButton = new Button(() =>
+        {
+            SetContentSource(
+                new FakeContentSource()
+            );
+        })
+        {
+            text = "Fake Source"
+        };
+
         toolbar.Add(contentButton);
         toolbar.Add(artAssetsButton);
+        toolbar.Add(soSourceButton);
+        toolbar.Add(fakeSourceButton);
 
         rootVisualElement.Add(toolbar);
+    }
+
+    private void SetContentSource(
+    IContentSource source)
+    {
+        contentSource = source;
+
+        selectedContent = null;
+
+        RefreshContentList();
+
+        listView.itemsSource = contents;
+        listView.ClearSelection();
+        listView.Rebuild();
+
+        rightPane.Clear();
     }
 
     private void BuildContentView()
@@ -148,6 +187,7 @@ public class PetEditorWindow : EditorWindow
                 
                 // selectedPet = pet;
                 // ShowPet(selectedPet);
+                selectedContent = record;
                 ShowContent(record);
             }
         };
