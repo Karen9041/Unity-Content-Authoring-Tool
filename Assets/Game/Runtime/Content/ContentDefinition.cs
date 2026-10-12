@@ -1,5 +1,7 @@
 using UnityEngine;
-
+/// <summary>
+/// common model
+/// </summary>
 public class ContentDefinition
 {
     public string Id;

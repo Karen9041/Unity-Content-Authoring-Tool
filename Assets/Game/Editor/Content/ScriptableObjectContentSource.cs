@@ -4,9 +4,9 @@ using UnityEditor;
 
 public class ScriptableObjectContentSource: IContentSource
 {
-    public IReadOnlyList<ContentDefinition> Load()
+    public IReadOnlyList<ContentRecord> Load()
     {
-        var results = new List<ContentDefinition>();
+        var results = new List<ContentRecord>();
 
         string[] guids = AssetDatabase.FindAssets("t:PetData");
 
@@ -19,7 +19,16 @@ public class ScriptableObjectContentSource: IContentSource
             if (pet == null)
                 continue;
 
-            results.Add(ConvertPetData(pet));
+            results.Add(new ContentRecord
+            {
+                Definition = ConvertPetData(pet),
+
+                Source = new ContentSourceHandle
+                {
+                    SourceType = "ScriptableObject",
+                    SourceId = path
+                }
+            });
         }
 
         return results;

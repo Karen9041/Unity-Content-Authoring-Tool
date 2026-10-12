@@ -7,7 +7,7 @@ using UnityEditor.UIElements;
 public class PetEditorWindow : EditorWindow
 {
     private List<PetData> pets = new();
-    private List<ContentDefinition> contents = new();
+    private List<ContentRecord> contents = new();
     private IContentSource contentSource;
     private PetData selectedPet;
 
@@ -103,38 +103,38 @@ public class PetEditorWindow : EditorWindow
 
         listView = new ListView
         {
-            itemsSource = pets,
+            itemsSource = contents,
             makeItem = () => new Label(),
             bindItem = (element, index) =>
             {
                 var label = (Label)element;
-                var pet = pets[index];
+                var record = contents[index];
 
-                if(!validationCache.TryGetValue(pet, out var results))
-                {
-                    results = new List<ValidationResult>();
-                }
+                // if(!validationCache.TryGetValue(pet, out var results))
+                // {
+                //     results = new List<ValidationResult>();
+                // }
 
-                if (results != null && results.Count > 0)
-                {
-                    var highestSeverity = ValidationSeverity.Warning;
-                    foreach (var result in results)
-                    {
-                        if (result.Severity == ValidationSeverity.Error)
-                        {
-                            highestSeverity = ValidationSeverity.Error;
-                            break;
-                        }
-                    }
+                // if (results != null && results.Count > 0)
+                // {
+                //     var highestSeverity = ValidationSeverity.Warning;
+                //     foreach (var result in results)
+                //     {
+                //         if (result.Severity == ValidationSeverity.Error)
+                //         {
+                //             highestSeverity = ValidationSeverity.Error;
+                //             break;
+                //         }
+                //     }
 
-                    label.style.color = highestSeverity == ValidationSeverity.Error ? Color.red : Color.yellow;
-                }
-                else
-                {
-                    label.style.color = Color.white;
-                }
+                //     label.style.color = highestSeverity == ValidationSeverity.Error ? Color.red : Color.yellow;
+                // }
+                // else
+                // {
+                //     label.style.color = Color.white;
+                // }
                 
-                label.text = pets[index].DisplayName;
+                label.text = contents[index].Definition.Name;
             },
             selectionType = SelectionType.Single
         };
@@ -143,11 +143,12 @@ public class PetEditorWindow : EditorWindow
         {
             foreach(var item in selection)
             {
-                if(item is not PetData pet)
+                if(item is not ContentRecord record)
                     continue;
                 
-                selectedPet = pet;
-                ShowPet(selectedPet);
+                // selectedPet = pet;
+                // ShowPet(selectedPet);
+                ShowContent(record);
             }
         };
 
@@ -263,16 +264,6 @@ public class PetEditorWindow : EditorWindow
             contentSource.Load();
 
         contents.AddRange(loaded);
-
-        foreach (var content in contents)
-        {
-            Debug.Log(
-                $"{content.Id} | " +
-                $"{content.Name} | " +
-                $"{content.PrefabKey} | " +
-                $"{content.IconKey}"
-            );
-        }
     }
 
     private void RefreshPetList()
@@ -392,6 +383,31 @@ public class PetEditorWindow : EditorWindow
             }
             RefreshValidation(pet);
         });
+    }
+
+    private void ShowContent(ContentRecord record)
+    {
+        rightPane.Clear();
+
+        rightPane.Add(
+            new Label($"ID: {record.Definition.Id}")
+        );
+
+        rightPane.Add(
+            new Label($"Name: {record.Definition.Name}")
+        );
+
+        rightPane.Add(
+            new Label($"Prefab: {record.Definition.PrefabKey}")
+        );
+
+        rightPane.Add(
+            new Label($"Icon: {record.Definition.IconKey}")
+        );
+
+        rightPane.Add(
+            new Label($"Source: {record.Source.SourceId}")
+        );
     }
 
     private void BuildPetInIndex()
