@@ -105,10 +105,24 @@ public class PetEditorWindow : EditorWindow
             text = "Fake Source"
         };
 
+        var excelSourceButton = new Button(() =>
+        {
+            SetContentSource(
+                new ExcelContentSource(
+                    "Assets/Game/ContentData/Content.xlsx",
+                    "PetSetting"
+                )
+            );
+        })
+        {
+            text = "Excel Source"
+        };
+
         toolbar.Add(contentButton);
-        toolbar.Add(artAssetsButton);
+        //toolbar.Add(artAssetsButton);
         toolbar.Add(soSourceButton);
         toolbar.Add(fakeSourceButton);
+        toolbar.Add(excelSourceButton);
 
         rootVisualElement.Add(toolbar);
     }
