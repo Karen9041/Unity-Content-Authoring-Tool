@@ -12,4 +12,5 @@ public class ContentDefinition
 
     public string PrefabKey;
     public string IconKey;
+    public int ContentType;
 }
