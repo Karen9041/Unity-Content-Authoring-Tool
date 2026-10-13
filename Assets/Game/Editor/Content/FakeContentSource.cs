@@ -2,11 +2,11 @@ using System.Collections.Generic;
 
 public class FakeContentSource : IContentSource
 {
-    public IReadOnlyList<ContentRecord> Load()
+    public ContentLoadResult Load()
     {
-        return new List<ContentRecord>
-        {
-            new ContentRecord
+        var result = new ContentLoadResult();
+
+        result.Records.Add(new ContentRecord
             {
                 Definition = new ContentDefinition
                 {
@@ -23,9 +23,9 @@ public class FakeContentSource : IContentSource
                     SourceType = "Fake",
                     SourceId = "Fake:pet_001"
                 }
-            },
-
-            new ContentRecord
+            });
+        
+        result.Records.Add(new ContentRecord
             {
                  Definition = new ContentDefinition
                 {
@@ -42,9 +42,9 @@ public class FakeContentSource : IContentSource
                     SourceType = "Fake",
                     SourceId = "Fake:pet_002"
                 }
-            },
+            });
 
-            new ContentRecord
+        result.Records.Add(new ContentRecord
             {
                 Definition = new ContentDefinition
                 {
@@ -61,7 +61,8 @@ public class FakeContentSource : IContentSource
                     SourceType = "Fake",
                     SourceId = "Fake:pet_003"
                 }
-            }
-        };
+            });
+
+        return result;
     }
 }

@@ -3,5 +3,5 @@ using System.Collections.Generic;
 
 public interface IContentSource
 {
-    IReadOnlyList<ContentRecord> Load();
+    ContentLoadResult Load();
 }

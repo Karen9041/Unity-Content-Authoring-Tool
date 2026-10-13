@@ -9,6 +9,7 @@ public class PetEditorWindow : EditorWindow
     private List<PetData> pets = new();
     private List<ContentRecord> contents = new();
     private IContentSource contentSource;
+    private List<SourceDiagnostic> sourceDiagnostics = new();
     private PetData selectedPet;
     private ContentRecord selectedContent;
 
@@ -312,12 +313,23 @@ public class PetEditorWindow : EditorWindow
 
     private void RefreshContentList()
     {
+        var loadResult = contentSource.Load();
+
         contents.Clear();
+        contents.AddRange(loadResult.Records);
 
-        var loaded =
-            contentSource.Load();
+        sourceDiagnostics.Clear();
+        sourceDiagnostics.AddRange(loadResult.Diagnostics);
 
-        contents.AddRange(loaded);
+        foreach (var diagnostic in sourceDiagnostics)
+        {
+            Debug.LogError(
+                $"{diagnostic.SheetName} " +
+                $"Row {diagnostic.Row} " +
+                $"Field {diagnostic.FieldName}: " +
+                diagnostic.Message
+            );
+        }
     }
 
     private void RefreshPetList()

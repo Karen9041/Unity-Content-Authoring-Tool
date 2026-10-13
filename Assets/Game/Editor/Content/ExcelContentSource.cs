@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Ports;
 using NPOI.SS.UserModel;
 using NPOI.XSSF.UserModel;
 using UnityEngine;
@@ -8,6 +9,15 @@ public sealed class ExcelContentSource : IContentSource
 {
     private readonly string filePath;
     private readonly string sheetName;
+    private Dictionary<string, int> headers = new();
+
+    private static readonly string[] RequiredHeaders =
+    {
+        "Id",
+        "Name",
+        "PrefabAddress",
+        "IconKey"
+    };
 
     public ExcelContentSource(string filePath, string sheetName)
     {
@@ -15,10 +25,11 @@ public sealed class ExcelContentSource : IContentSource
         this.sheetName = sheetName;
     }
 
-    public IReadOnlyList<ContentRecord> Load()
+    public ContentLoadResult Load()
     {
-        var results = new List<ContentRecord>();
-
+        var result = new ContentLoadResult();
+        bool hasMissingRequiredHeader = false;
+        
         using var stream = File.OpenRead(filePath);
         IWorkbook workBook = new XSSFWorkbook(stream);
 
@@ -27,10 +38,41 @@ public sealed class ExcelContentSource : IContentSource
         if(sheet == null)
         {
             Debug.Log("no sheet");
-            return results;
+            return result;
         }
 
         // row 1 = header
+        headers = BuildHeaderMap(sheet.GetRow(1));
+
+        foreach (string requiredHeader in RequiredHeaders)
+        {
+            if (headers.ContainsKey(requiredHeader))
+            {
+                continue;
+            }
+            else
+            {   
+                hasMissingRequiredHeader = true;
+            }
+            result.Diagnostics.Add(
+                new SourceDiagnostic
+                {
+                    Severity = DiagnosticSeverity.Error,
+                    SheetName = sheet.SheetName,
+                    Row = 1,
+                    Column = -1,
+                    FieldName = requiredHeader,
+                    Message = $"Required header '{requiredHeader}' is missing."
+                }
+            );
+        }
+
+        //stop parsing
+        if (hasMissingRequiredHeader)
+        {
+            return result;
+        }
+
         for(int rowIndex = 2; rowIndex <= sheet.LastRowNum; rowIndex++)
         {
             var row = sheet.GetRow(rowIndex);
@@ -40,15 +82,15 @@ public sealed class ExcelContentSource : IContentSource
 
             var definition = new ContentDefinition
             {
-                Id = GetCellString(row, 1),
-                Name = GetCellString(row, 2),
-                EvolutionFromId = GetCellString(row, 3),
-                EvolutionToId = GetCellString(row, 4),
-                PrefabKey = GetCellString(row, 5),
-                IconKey = GetCellString(row, 6)
+                Id = ReadString(row, headers, "Id"),
+                Name = ReadString(row, headers, "Name"),
+                EvolutionFromId = ReadString(row, headers, "EvolutionFromId"),
+                EvolutionToId = ReadString(row, headers, "EvolutionToId"),
+                PrefabKey = ReadString(row, headers, "PrefabKey"),
+                IconKey = ReadString(row, headers, "IconKey"),
             };
 
-            results.Add(new ContentRecord
+            result.Records.Add(new ContentRecord
             {
                 Definition = definition,
                 Source = new ContentSourceHandle
@@ -59,7 +101,7 @@ public sealed class ExcelContentSource : IContentSource
             });
         }
 
-        return results;
+        return result;
     }
 
     private static string GetCellString(IRow row, int columnIndex)
@@ -72,4 +114,36 @@ public sealed class ExcelContentSource : IContentSource
         return cell.ToString()?.Trim();
     }
 
+    private Dictionary<string, int> BuildHeaderMap(IRow headerRow)
+    {
+        for(int columnIndex = 0; columnIndex < headerRow.LastCellNum; columnIndex++)
+        {
+            var cell = headerRow.GetCell(columnIndex);
+
+            string header = cell?.ToString()?.Trim();
+
+            if(string.IsNullOrWhiteSpace(header))
+                continue;
+
+            headers[header] = columnIndex;
+            Debug.Log(header + " = " + headers[header]);
+        }
+
+        return headers;
+    }
+
+    private string ReadString(IRow row, Dictionary<string, int> headers, string fieldName)
+    {
+        if(!headers.TryGetValue(fieldName, out int columnIndex))
+        {
+            return null;
+        }
+
+        var cell = row.GetCell(columnIndex);
+
+        if(cell == null)
+            return null;
+        
+        return cell.ToString()?.Trim();
+    }
 }

@@ -4,9 +4,9 @@ using UnityEditor;
 
 public class ScriptableObjectContentSource: IContentSource
 {
-    public IReadOnlyList<ContentRecord> Load()
+    public ContentLoadResult Load()
     {
-        var results = new List<ContentRecord>();
+        var result = new ContentLoadResult();
 
         string[] guids = AssetDatabase.FindAssets("t:PetData");
 
@@ -19,7 +19,7 @@ public class ScriptableObjectContentSource: IContentSource
             if (pet == null)
                 continue;
 
-            results.Add(new ContentRecord
+            result.Records.Add(new ContentRecord
             {
                 Definition = ConvertPetData(pet),
 
@@ -31,7 +31,7 @@ public class ScriptableObjectContentSource: IContentSource
             });
         }
 
-        return results;
+        return result;
     }
 
     private ContentDefinition ConvertPetData(PetData pet)
