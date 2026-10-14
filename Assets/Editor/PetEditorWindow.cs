@@ -4,13 +4,12 @@ using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 
+
 public class PetEditorWindow : EditorWindow
 {
-    private List<PetData> pets = new();
     private List<ContentRecord> contents = new();
     private IContentSource contentSource;
     private List<SourceDiagnostic> sourceDiagnostics = new();
-    private PetData selectedPet;
     private ContentRecord selectedContent;
 
     private enum EditorMode
@@ -23,24 +22,12 @@ public class PetEditorWindow : EditorWindow
 
     private VisualElement contentView;
     private VisualElement artAssetsView;
-
     private VisualElement rightPane;
-    private VisualElement artRightPane;
-
     private ListView listView;
-    private ListView artCandidateListView;
-
     private VisualElement contentValidationContainer;
-    private VisualElement artValidationContainer;
 
-    private readonly Dictionary<PetData, List<ValidationResult>> validationCache = new();
-    private readonly Dictionary<string, List<PetData>> petsById = new();
-    private Image iconPreview;
-    private Image PrefabPreview;
-    private PetData previewPet;
-    private const string PetArtRoot = "Assets/Game/Arts/Pets";
-    private List<PetArtCandidate> artCandidates = new();
-    
+    private readonly Dictionary<ContentRecord, List<ValidationResult>> validationCache = new();
+    private readonly Dictionary<string, List<ContentRecord>> contentsById = new();
 
     [MenuItem("Tools/Content Tools/Pet Editor")]
     public static void Open()
@@ -50,12 +37,10 @@ public class PetEditorWindow : EditorWindow
 
     public void CreateGUI()
     {
-        contentSource = new ScriptableObjectContentSource();
+        contentSource = new FakeContentSource();
 
         RefreshContentList();
-
-        RefreshPetList();
-        RefreshArtCandidates();
+        ValidateAllContents();
 
         BuildToolbar();
         BuildContentView();
@@ -136,6 +121,7 @@ public class PetEditorWindow : EditorWindow
         selectedContent = null;
 
         RefreshContentList();
+        ValidateAllContents();
 
         listView.itemsSource = contents;
         listView.ClearSelection();
@@ -164,29 +150,29 @@ public class PetEditorWindow : EditorWindow
                 var label = (Label)element;
                 var record = contents[index];
 
-                // if(!validationCache.TryGetValue(pet, out var results))
-                // {
-                //     results = new List<ValidationResult>();
-                // }
+                if(!validationCache.TryGetValue(record, out var results))
+                {
+                    results = new List<ValidationResult>();
+                }
 
-                // if (results != null && results.Count > 0)
-                // {
-                //     var highestSeverity = ValidationSeverity.Warning;
-                //     foreach (var result in results)
-                //     {
-                //         if (result.Severity == ValidationSeverity.Error)
-                //         {
-                //             highestSeverity = ValidationSeverity.Error;
-                //             break;
-                //         }
-                //     }
+                if (results.Count > 0)
+                {
+                    var highestSeverity = ValidationSeverity.Warning;
+                    foreach (var result in results)
+                    {
+                        if (result.Severity == ValidationSeverity.Error)
+                        {
+                            highestSeverity = ValidationSeverity.Error;
+                            break;
+                        }
+                    }
 
-                //     label.style.color = highestSeverity == ValidationSeverity.Error ? Color.red : Color.yellow;
-                // }
-                // else
-                // {
-                //     label.style.color = Color.white;
-                // }
+                    label.style.color = highestSeverity == ValidationSeverity.Error ? Color.red : Color.yellow;
+                }
+                else
+                {
+                    label.style.color = Color.white;
+                }
                 
                 label.text = contents[index].Definition.Name;
             },
@@ -207,7 +193,7 @@ public class PetEditorWindow : EditorWindow
             }
         };
 
-        leftPane.Add(new Label($"Pets: {pets.Count}"));
+        leftPane.Add(new Label($"Pets: {contents.Count}"));
         leftPane.Add(listView);
 
         splitView.Add(leftPane);
@@ -222,78 +208,11 @@ public class PetEditorWindow : EditorWindow
     {
         artAssetsView = new VisualElement();
 
-        var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
-
-        var leftPane = new VisualElement();
-        artRightPane = new VisualElement();
-
-        artValidationContainer = new VisualElement();
-
-        artCandidateListView = new ListView
-        {
-            itemsSource = artCandidates,
-
-            makeItem = () => new Label(),
-
-            bindItem = (element, index) =>
-            {
-                var label = (Label)element;
-                var candidate = artCandidates[index];
-
-                var validation =
-                    ValidateArtCandidate(candidate);
-
-                string folderName =
-                    System.IO.Path.GetFileName(
-                        candidate.FolderPath);
-
-                bool hasError = validation.Exists(
-                    r => r.Severity == ValidationSeverity.Error);
-
-                bool hasWarning = validation.Exists(
-                    r => r.Severity == ValidationSeverity.Warning);
-
-                string prefix =
-                    hasError ? "✕" :
-                    hasWarning ? "⚠" :
-                    "✓";
-
-                label.text =
-                    $"{prefix} {folderName}";
-            },
-
-            selectionType = SelectionType.Single
-        };
-
-        artCandidateListView.selectionChanged += selection =>
-        {
-            foreach (var item in selection)
-            {
-                if (item is not PetArtCandidate candidate)
-                    continue;
-
-                ShowArtCandidate(candidate);
-            }
-        };
-
-        leftPane.Add(new Label($"Art Candidates: {artCandidates.Count}"));
-        leftPane.Add(artCandidateListView);
-
-        splitView.Add(leftPane);
-        splitView.Add(artRightPane);
-
-        artAssetsView.Add(splitView);
+        artAssetsView.Add(
+            new Label("Art Asset Browser")
+        );
 
         rootVisualElement.Add(artAssetsView);
-    }
-
-    private void ShowArtCandidate(PetArtCandidate candidate)
-    {
-        artRightPane.Clear();
-
-        artRightPane.Add(
-            new Label(candidate.FolderPath)
-        );
     }
 
     private void SwitchMode(EditorMode mode)
@@ -323,132 +242,17 @@ public class PetEditorWindow : EditorWindow
 
         foreach (var diagnostic in sourceDiagnostics)
         {
-            Debug.LogError(
+            string message =
                 $"{diagnostic.SheetName} " +
                 $"Row {diagnostic.Row} " +
                 $"Field {diagnostic.FieldName}: " +
-                diagnostic.Message
-            );
+                diagnostic.Message;
+            
+            if(diagnostic.Severity == DiagnosticSeverity.Error)
+                Debug.LogError(message);
+            else
+                Debug.LogWarning(message);
         }
-    }
-
-    private void RefreshPetList()
-    {
-        pets.Clear();
-
-        string[] guids = AssetDatabase.FindAssets("t:PetData");
-
-        foreach(string guid in guids)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            PetData pet = AssetDatabase.LoadAssetAtPath<PetData>(path);
-
-            if(pet != null)
-            {
-                pets.Add(pet);
-            }
-        }
-
-        ValidateAllPets();
-    }
-
-    private void ShowPet(PetData pet)
-    {
-        rightPane.Clear();
-
-        var serializedPet = new SerializedObject(pet);
-
-        PropertyField idField = new PropertyField(serializedPet.FindProperty("id"));
-        rightPane.Add(idField);
-        
-        PropertyField displayNameField = new PropertyField(serializedPet.FindProperty("displayName"));
-        rightPane.Add(displayNameField);
-
-        PropertyField iconField = new PropertyField(serializedPet.FindProperty("icon"));
-        rightPane.Add(iconField);
-
-        iconPreview = new Image
-        {
-          scaleMode = ScaleMode.ScaleToFit,  
-        };
-
-        iconPreview.style.width = 128;
-        iconPreview.style.height = 128;
-        iconPreview.image = pet.Icon != null? pet.Icon.texture : null;
-
-        var iconPreviewContainer = new VisualElement();
-        iconPreviewContainer.Add(iconPreview);
-        iconPreviewContainer.style.flexDirection = FlexDirection.Row;
-        iconPreviewContainer.style.justifyContent = Justify.FlexEnd;        
-
-        rightPane.Add(iconPreviewContainer);
-
-        PropertyField prefabField = new PropertyField(serializedPet.FindProperty("prefab"));
-        rightPane.Add(prefabField);
-
-        PrefabPreview = new Image
-        {
-            scaleMode = ScaleMode.ScaleToFit,
-        };
-
-        PrefabPreview.style.width = 160;
-        PrefabPreview.style.height = 160;
-        RefreshPrefabPreview(pet);
-
-        var prefabPreviewContainer = new VisualElement();
-        prefabPreviewContainer.Add(PrefabPreview);
-        prefabPreviewContainer.style.flexDirection = FlexDirection.Row;
-        prefabPreviewContainer.style.justifyContent = Justify.FlexEnd;
-
-        rightPane.Add(prefabPreviewContainer);
-
-        rightPane.Bind(serializedPet);
-
-        rightPane.Add(contentValidationContainer);
-
-        RefreshValidation(pet);
-
-        idField.RegisterValueChangeCallback(evt =>
-        {
-            ValidateAllPets();
-            listView.RefreshItems();
-            RefreshValidation(pet);
-        });
-
-        displayNameField.RegisterValueChangeCallback(evt =>
-        {
-            int index = pets.IndexOf(pet);
-            if(index >= 0)
-            {
-                listView.RefreshItem(index);
-            }
-        });
-
-        iconField.RegisterValueChangeCallback(evt =>
-        {
-            iconPreview.image = pet.Icon != null? pet.Icon.texture : null;
-
-            ValidatePetAndUpdateCache(pet);
-            int index = pets.IndexOf(pet);
-            if(index >= 0)
-            {
-                listView.RefreshItem(index);
-            }
-            RefreshValidation(pet);
-        });
-
-        prefabField.RegisterValueChangeCallback(evt =>
-        {
-            RefreshPrefabPreview(pet);
-
-            ValidatePetAndUpdateCache(pet);
-            int index = pets.IndexOf(pet);
-            if(index >= 0)
-            {
-                listView.RefreshItem(index);
-            }
-            RefreshValidation(pet);
-        });
     }
 
     private void ShowContent(ContentRecord record)
@@ -474,196 +278,130 @@ public class PetEditorWindow : EditorWindow
         rightPane.Add(
             new Label($"Source: {record.Source.SourceId}")
         );
+
+        rightPane.Add(contentValidationContainer);
+
+        RefreshValidation(record);
     }
 
-    private void BuildPetInIndex()
+    private void BuildContentIdIndex()
     {
-        petsById.Clear();
+        contentsById.Clear();
 
-        foreach(var pet in pets)
+        foreach(var content in contents)
         {
-            if(string.IsNullOrWhiteSpace(pet.Id))
+            string id = content.Definition.Id;
+
+            if(string.IsNullOrWhiteSpace(id))
                 continue;
 
-            if(!petsById.TryGetValue(pet.Id, out var sameIdPets))
+            if(!contentsById.TryGetValue(id, out var sameIdContents))
             {
-                sameIdPets = new List<PetData>();
-                petsById.Add(pet.Id, sameIdPets);
+                sameIdContents = new List<ContentRecord>();
+                contentsById.Add(content.Definition.Id, sameIdContents);
             }
 
-            sameIdPets.Add(pet);
+            sameIdContents.Add(content);
         }
-    }
-
-    private void RefreshPrefabPreview(PetData pet)
-    {
-        previewPet = pet;
-
-        if(pet == null || pet.Prefab == null)
-        {
-            PrefabPreview.image = null;
-            EditorApplication.update -= PollPrefabPreview;
-            return;
-        }
-
-        var prefabTexture = AssetPreview.GetAssetPreview(pet.Prefab);
-        if(prefabTexture != null)
-        {
-            PrefabPreview.image = prefabTexture;
-            EditorApplication.update -= PollPrefabPreview;
-            return;
-        }
-
-        EditorApplication.update += PollPrefabPreview;
-        EditorApplication.update -= PollPrefabPreview;
-    }
-
-    private void PollPrefabPreview()
-    {
-        if(previewPet == null || previewPet.Prefab == null)
-        {
-            EditorApplication.update -= PollPrefabPreview;
-            return;
-        }
-
-        if(previewPet != selectedPet)
-        {
-            EditorApplication.update -= PollPrefabPreview;
-            return;
-        }
-
-        var prefabTexture = AssetPreview.GetAssetPreview(previewPet.Prefab);
-        if(prefabTexture == null)
-            return;
-
-        PrefabPreview.image = prefabTexture;
-        EditorApplication.update -= PollPrefabPreview;
-        
-        Repaint();
-    }
-
-    private void OnEnable()
-    {
-        Undo.undoRedoPerformed += OnUndoRedo;
-    }
-
-    private void OnDisable()
-    {
-        Undo.undoRedoPerformed -= OnUndoRedo;
-        EditorApplication.update -= PollPrefabPreview;
-    }
-
-    private void OnUndoRedo()
-    {
-        if(selectedPet == null)
-            return;
-
-        // Validation is derived state
-        ValidateAllPets();
-        listView.RefreshItems();
-        RefreshValidation(selectedPet);
     }
 
 #region Validation 
 
-    private bool IsIdMissing(PetData selectedPet)
+    private void ValidateMissingId(ContentRecord record, List<ValidationResult> results)
     {
-        return string.IsNullOrWhiteSpace(selectedPet?.Id);
-    }
-
-    private bool IsPrefabMissing(PetData selectedPet)
-    {
-        return selectedPet?.Prefab == null;
-    }
-
-    private bool IsIconMissing(PetData selectedPet)
-    {
-        return selectedPet?.Icon == null;
-    }
-
-    private List<PetData> FindDuplicateIdPets(PetData selectedPet)
-    {
-        if(string.IsNullOrWhiteSpace(selectedPet?.Id))
-            return new List<PetData>();
-
-        if(!petsById.TryGetValue(selectedPet.Id, out var sameIdPets))
-            return new List<PetData>();
-
-        var duplicates = new List<PetData>();
-
-        foreach(var pet in sameIdPets)
+        if(!string.IsNullOrWhiteSpace(record.Definition.Id))
         {
-            if(pet != selectedPet)
-            {
-                duplicates.Add(pet);
-            }
+            return;
         }
 
-        return duplicates;
+        results.Add(new ValidationResult
+        {
+            Severity = ValidationSeverity.Error,
+            Message = "Content ID is required."
+        });
     }
 
-    public enum ValidationSeverity
+    private void ValidateDuplicateId(
+        ContentRecord record, 
+        Dictionary<string, List<ContentRecord>> idIndex, 
+        List<ValidationResult> results)
     {
-        Warning,
-        Error
+        string id = record.Definition.Id;
+
+        if(string.IsNullOrWhiteSpace(id))
+            return;
+
+        if(!idIndex.TryGetValue(id, out var records))
+            return;
+
+        if(records.Count <= 1)
+            return;
+
+        results.Add(new ValidationResult
+        {
+            Severity = ValidationSeverity.Error,
+            Message = $"Content ID '{id}' is duplicated."
+        });
     }
 
-    public class ValidationResult
+    private void ValidateEvolutionTarget(
+        ContentRecord record, 
+        Dictionary<string, List<ContentRecord>> idIndex, 
+        List<ValidationResult> results)
     {
-        public ValidationSeverity Severity;
-        public string Message;
+        string targetId = record.Definition.EvolutionToId;
+
+        if(string.IsNullOrWhiteSpace(targetId))
+            return;
+
+        if(idIndex.ContainsKey(targetId))
+            return;
+
+        results.Add(new ValidationResult
+        {
+            Severity = ValidationSeverity.Error,
+            Message = $"Evolution target '{targetId}' does not exist."
+        });
     }
 
-    public List<ValidationResult> ValidatePet(PetData selectedPet)
+    private void ValidateSelfEvolution(ContentRecord record, List<ValidationResult> results)
+    {
+        string id = record.Definition.Id;
+        string targetId = record.Definition.EvolutionToId;
+
+        if(string.IsNullOrWhiteSpace(id))
+            return;
+
+        if(string.IsNullOrWhiteSpace(targetId))
+            return;
+        
+        if(id != targetId)
+            return;
+
+        results.Add(new ValidationResult
+        {
+           Severity = ValidationSeverity.Error,
+           Message =  $"Content '{id}' cannot evolve into itself."
+        });
+    }
+
+    public List<ValidationResult> ValidateContent(ContentRecord record)
     {
         var results = new List<ValidationResult>();
 
-        if(IsIdMissing(selectedPet))
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "ID is required."
-            });
-        }
-
-        if(IsPrefabMissing(selectedPet))
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Prefab is required."
-            });
-        }
-
-        if(IsIconMissing(selectedPet))
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Warning,
-                Message = "Icon is missing."
-            });
-        }
-
-        var duplicatePets = FindDuplicateIdPets(selectedPet);
-
-        foreach(var duplicate in duplicatePets)
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = $"ID '{selectedPet.Id}' is also used by '{duplicate.name}'."
-            });
-        }
+        ValidateMissingId(record, results);
+        ValidateDuplicateId(record, contentsById, results);
+        ValidateEvolutionTarget(record, contentsById, results);
+        ValidateSelfEvolution(record, results);
 
         return results;
     }
 
-    private void RefreshValidation(PetData pet)
+    private void RefreshValidation(ContentRecord record)
     {
         contentValidationContainer.Clear();
-        contentValidationContainer.Add(new Label("Validation"));
-        var validationResults = ValidatePet(pet);
+        contentValidationContainer.Add(new Label("[Validation]"));
+        var validationResults = ValidateContent(record);
         foreach(var result in validationResults)
         {
             contentValidationContainer.Add(
@@ -672,175 +410,21 @@ public class PetEditorWindow : EditorWindow
         }
     }
 
-    private void ValidatePetAndUpdateCache(PetData pet)
+    private void ValidateContentAndUpdateCache(ContentRecord record)
     {
-        validationCache[pet] = ValidatePet(pet);
+        validationCache[record] = ValidateContent(record);
     }
 
-    private void ValidateAllPets()
+    private void ValidateAllContents()
     {
         validationCache.Clear();
 
-        BuildPetInIndex();
+        BuildContentIdIndex();
 
-        foreach(var pet in pets)
+        foreach(var content in contents)
         {
-            ValidatePetAndUpdateCache(pet);
+            ValidateContentAndUpdateCache(content);
         }
-    }
-
-    private List<ValidationResult> ValidateArtCandidate(PetArtCandidate candidate)
-    {
-        var results = new List<ValidationResult>();
-
-        if(candidate.Prefabs.Count == 0)
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Prefab is missing"
-            });
-        }else if(candidate.Prefabs.Count > 1){
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = $"Multiple prefabs found ({candidate.Prefabs.Count})."
-            });
-        }
-
-        if(candidate.Icons.Count == 0)
-        {
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Icon is missing"
-            });
-        }else if(candidate.Icons.Count > 1){
-            results.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = $"Multiple Icons found ({candidate.Icons.Count})."
-            });
-        }
-
-        return results;
-    }
-
-#endregion
-
-#region Scanner
-
-    public class PetArtCandidate
-    {
-        public string FolderPath;
-        public List<GameObject> Prefabs = new();
-        public List<Sprite> Icons = new();
-    }
-
-    private List<GameObject> FindPetPrefabs()
-    {
-        var results = new List<GameObject>();
-
-        string[] guids = AssetDatabase.FindAssets(
-            "t:Prefab",
-            new[] {PetArtRoot});
-        
-        foreach(string guid in guids)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-
-            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-
-            if(prefab != null)
-            {
-                results.Add(prefab);
-            }
-        }
-
-        return results;
-    }
-
-    private List<Sprite> FindPetIcons()
-    {
-        var results = new List<Sprite>();
-
-        string[] guids = AssetDatabase.FindAssets(
-            "t:Sprite",
-            new[] {PetArtRoot});
-
-        foreach(string guid in guids)
-        {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-
-            var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-
-            if(sprite != null)
-            {
-                results.Add(sprite);
-            }
-        }
-
-        return results;
-    }
-
-    private void RefreshArtCandidates()
-    {
-        artCandidates.Clear();
-
-        var candidatesByFolder = new Dictionary<string, PetArtCandidate>();
-
-        foreach(string folder in AssetDatabase.GetSubFolders(PetArtRoot))
-        {
-            candidatesByFolder[folder] = new PetArtCandidate
-            {
-                FolderPath = folder
-            };
-        }
-
-        foreach(GameObject prefab in FindPetPrefabs())
-        {
-            string path = AssetDatabase.GetAssetPath(prefab);
-            string folder = GetPetRootFolder(path);
-
-            if(folder != null && candidatesByFolder.TryGetValue(folder, out var candidate))
-            {
-                candidate.Prefabs.Add(prefab);
-            }
-        }
-
-        foreach(Sprite icon in FindPetIcons())
-        {
-            string path = AssetDatabase.GetAssetPath(icon);
-            string folder = GetPetRootFolder(path);
-
-            if(folder != null && candidatesByFolder.TryGetValue(folder, out var candidate))
-            {
-                candidate.Icons.Add(icon);
-            }
-        }
-
-        artCandidates = new List<PetArtCandidate>(candidatesByFolder.Values);
-    }
-
-    private string GetPetRootFolder(string assetPath)
-    {
-        string prefix = PetArtRoot.TrimEnd('/') + "/";
-
-        if (!assetPath.StartsWith(prefix))
-            return null;
-
-        string relativePath =
-            assetPath.Substring(prefix.Length);
-
-        int slashIndex = relativePath.IndexOf('/');
-
-        if (slashIndex < 0)
-            return null;
-
-        string petFolderName =
-            relativePath.Substring(0, slashIndex);
-
-        return prefix + petFolderName;
     }
 
 #endregion
