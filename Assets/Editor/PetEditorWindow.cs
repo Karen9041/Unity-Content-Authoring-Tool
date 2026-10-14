@@ -393,6 +393,7 @@ public class PetEditorWindow : EditorWindow
         ValidateDuplicateId(record, contentsById, results);
         ValidateEvolutionTarget(record, contentsById, results);
         ValidateSelfEvolution(record, results);
+        ValidateEvolutionCycle(record, contentsById, results);
 
         return results;
     }
@@ -425,6 +426,77 @@ public class PetEditorWindow : EditorWindow
         {
             ValidateContentAndUpdateCache(content);
         }
+    }
+
+    //DFS helper
+    private bool HasEvolutionCycle(
+        string contentId, 
+        Dictionary<string, List<ContentRecord>> idIndex, 
+        HashSet<string> visiting, 
+        HashSet<string> visited)
+    {
+        if(visiting.Contains(contentId))
+            return true;
+
+        if(visited.Contains(contentId))
+            return false;
+
+        if(!idIndex.TryGetValue(contentId, out var records))
+            return false;
+
+        if(records.Count != 1)
+            return false;
+
+        visiting.Add(contentId);
+
+        var record = records[0];
+        string nextId = record.Definition.EvolutionToId;
+
+        //self-loop
+        if(contentId == nextId)
+            return false;
+
+        if (!string.IsNullOrWhiteSpace(nextId))
+        {
+            if(HasEvolutionCycle(
+                nextId,
+                idIndex,
+                visiting,
+                visited
+            ))
+            {
+                return true;
+            }
+        }
+
+        visiting.Remove(contentId);
+        visited.Add(contentId);
+
+        return false;
+    }
+
+    private void ValidateEvolutionCycle(
+        ContentRecord record,
+        Dictionary<string, List<ContentRecord>> idIndex,
+        List<ValidationResult> results
+    )
+    {
+        string id = record.Definition.Id;
+
+        if(string.IsNullOrWhiteSpace(id))
+            return;
+
+        var visiting = new HashSet<string>();
+        var visited = new HashSet<string>();
+
+        if(!HasEvolutionCycle(id, idIndex, visiting, visited))
+            return;
+
+        results.Add(new ValidationResult
+        {
+           Severity = ValidationSeverity.Error,
+           Message = $"Evolution cycle detected from '{id}'."
+        });
     }
 
 #endregion

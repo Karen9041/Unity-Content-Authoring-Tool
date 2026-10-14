@@ -97,7 +97,64 @@ public class FakeContentSource : IContentSource
                 Source = new ContentSourceHandle
                 {
                     SourceType = "Fake",
-                    SourceId = "Fake:pet_003"
+                    SourceId = "Fake:"
+                }
+            });
+
+        result.Records.Add(new ContentRecord
+            {
+                Definition = new ContentDefinition
+                {
+                    Id = "pet_004",
+                    Name = "rabbit_A",
+                    EvolutionFromId = null,
+                    EvolutionToId = "pet_005",
+                    PrefabKey = "Pet_Rabbit",
+                    IconKey = "Icon_Rabbit"
+                },
+
+                Source = new ContentSourceHandle
+                {
+                    SourceType = "Fake",
+                    SourceId = "Fake:pet_004"
+                }
+            });
+
+        result.Records.Add(new ContentRecord
+            {
+                Definition = new ContentDefinition
+                {
+                    Id = "pet_005",
+                    Name = "rabbit_B",
+                    EvolutionFromId = null,
+                    EvolutionToId = "pet_006",
+                    PrefabKey = "Pet_Rabbit",
+                    IconKey = "Icon_Rabbit"
+                },
+
+                Source = new ContentSourceHandle
+                {
+                    SourceType = "Fake",
+                    SourceId = "Fake:pet_005"
+                }
+            });
+
+        result.Records.Add(new ContentRecord
+            {
+                Definition = new ContentDefinition
+                {
+                    Id = "pet_006",
+                    Name = "rabbit_C",
+                    EvolutionFromId = null,
+                    EvolutionToId = "pet_004",
+                    PrefabKey = "Pet_Rabbit",
+                    IconKey = "Icon_Rabbit"
+                },
+
+                Source = new ContentSourceHandle
+                {
+                    SourceType = "Fake",
+                    SourceId = "Fake:pet_006"
                 }
             });
 
