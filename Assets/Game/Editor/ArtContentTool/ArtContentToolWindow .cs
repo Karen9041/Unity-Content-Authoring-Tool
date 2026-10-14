@@ -4,8 +4,7 @@ using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
 
-
-public class PetEditorWindow : EditorWindow
+public class ArtContentToolWindow  : EditorWindow
 {
     private List<ContentRecord> contents = new();
     private IContentSource contentSource;
@@ -25,14 +24,21 @@ public class PetEditorWindow : EditorWindow
     private VisualElement rightPane;
     private ListView listView;
     private VisualElement contentValidationContainer;
+    private Label contentCount;
 
     private readonly Dictionary<ContentRecord, List<ValidationResult>> validationCache = new();
     private readonly Dictionary<string, List<ContentRecord>> contentsById = new();
 
-    [MenuItem("Tools/Content Tools/Pet Editor")]
+    private readonly List<AssetRecord> assetRecords = new();
+    private ListView assetListView;
+    private VisualElement assetDetailPane;
+
+    private const string ArtContentRoot = "Assets/Game/Arts";
+
+    [MenuItem("Tools/Content Tools/Art Content Tool")]
     public static void Open()
     {
-        GetWindow<PetEditorWindow>("Pet Editor");
+        GetWindow<ArtContentToolWindow >("Art Content Tool");
     }
 
     public void CreateGUI()
@@ -71,6 +77,33 @@ public class PetEditorWindow : EditorWindow
             text = "Art Assets"
         };
 
+        toolbar.Add(contentButton);
+        toolbar.Add(artAssetsButton);
+
+        rootVisualElement.Add(toolbar);
+    }
+
+    private void SetContentSource(
+    IContentSource source)
+    {
+        contentSource = source;
+
+        selectedContent = null;
+
+        RefreshContentList();
+        ValidateAllContents();
+
+        listView.itemsSource = contents;
+        listView.ClearSelection();
+        listView.Rebuild();
+
+        rightPane.Clear();
+    }
+
+    private void BuildContentView()
+    {
+        contentView = new VisualElement();
+
         var soSourceButton = new Button(() =>
         {
             SetContentSource(
@@ -104,35 +137,9 @@ public class PetEditorWindow : EditorWindow
             text = "Excel Source"
         };
 
-        toolbar.Add(contentButton);
-        //toolbar.Add(artAssetsButton);
-        toolbar.Add(soSourceButton);
-        toolbar.Add(fakeSourceButton);
-        toolbar.Add(excelSourceButton);
-
-        rootVisualElement.Add(toolbar);
-    }
-
-    private void SetContentSource(
-    IContentSource source)
-    {
-        contentSource = source;
-
-        selectedContent = null;
-
-        RefreshContentList();
-        ValidateAllContents();
-
-        listView.itemsSource = contents;
-        listView.ClearSelection();
-        listView.Rebuild();
-
-        rightPane.Clear();
-    }
-
-    private void BuildContentView()
-    {
-        contentView = new VisualElement();
+        contentView.Add(soSourceButton);
+        contentView.Add(fakeSourceButton);
+        contentView.Add(excelSourceButton);
 
         var splitView = new TwoPaneSplitView(0, 100, TwoPaneSplitViewOrientation.Horizontal);
 
@@ -186,14 +193,14 @@ public class PetEditorWindow : EditorWindow
                 if(item is not ContentRecord record)
                     continue;
                 
-                // selectedPet = pet;
-                // ShowPet(selectedPet);
                 selectedContent = record;
                 ShowContent(record);
             }
         };
 
-        leftPane.Add(new Label($"Pets: {contents.Count}"));
+        contentCount = new Label($"Contents: {contents.Count}");
+
+        leftPane.Add(contentCount);
         leftPane.Add(listView);
 
         splitView.Add(leftPane);
@@ -208,11 +215,54 @@ public class PetEditorWindow : EditorWindow
     {
         artAssetsView = new VisualElement();
 
-        artAssetsView.Add(
-            new Label("Art Asset Browser")
-        );
+        var rescanButton = new Button(() =>
+        {
+            RescanAssets();
+        })
+        {
+            text = "Rescan Assets"
+        };
+
+        artAssetsView.Add(rescanButton);
+
+        var splitView = new TwoPaneSplitView(0, 180, TwoPaneSplitViewOrientation.Horizontal);
+        var leftPane = new VisualElement();
+        assetDetailPane = new VisualElement();
+
+        assetListView = new ListView
+        {
+            itemsSource = assetRecords,
+            makeItem = () => new Label(),  
+            bindItem = (element, index) =>
+            {
+                var label = (Label)element;
+                var record = assetRecords[index];
+
+                label.text = $"{record.AssetType} | {record.Name}";
+            },
+
+            selectionType = SelectionType.Single
+        };
+
+        leftPane.Add(assetListView);
+
+        splitView.Add(leftPane);
+        splitView.Add(assetDetailPane);
+
+        artAssetsView.Add(splitView);
 
         rootVisualElement.Add(artAssetsView);
+
+        assetListView.selectionChanged += selection =>
+        {
+            foreach(var item in selection)
+            {
+                if(item is not AssetRecord record)
+                    continue;
+
+                ShowAssetDetail(record);
+            }
+        };
     }
 
     private void SwitchMode(EditorMode mode)
@@ -260,28 +310,59 @@ public class PetEditorWindow : EditorWindow
         rightPane.Clear();
 
         rightPane.Add(
-            new Label($"ID: {record.Definition.Id}")
-        );
+            new Label($"ID: {record.Definition.Id}"));
 
         rightPane.Add(
-            new Label($"Name: {record.Definition.Name}")
-        );
+            new Label($"Name: {record.Definition.Name}"));
 
         rightPane.Add(
-            new Label($"Prefab: {record.Definition.PrefabKey}")
-        );
+            new Label($"Prefab: {record.Definition.PrefabKey}"));
 
         rightPane.Add(
-            new Label($"Icon: {record.Definition.IconKey}")
-        );
+            new Label($"Icon: {record.Definition.IconKey}"));
 
         rightPane.Add(
-            new Label($"Source: {record.Source.SourceId}")
-        );
+            new Label($"Source: {record.Source.SourceId}"));
 
         rightPane.Add(contentValidationContainer);
 
         RefreshValidation(record);
+    }
+
+    private void ShowAssetDetail(AssetRecord record)
+    {
+        assetDetailPane.Clear();
+
+        assetDetailPane.Add(
+            new Label($"Name: {record.Name}"));
+
+        assetDetailPane.Add(
+            new Label($"Type: {record.AssetType}"));
+
+        assetDetailPane.Add(
+            new Label($"Path: {record.Path}"));
+
+        assetDetailPane.Add(
+            new Label($"GUID: {record.Guid}"));
+
+        var pingButton = new Button(() =>
+        {
+            EditorGUIUtility.PingObject(record.Asset);
+        })
+        {
+            text = "Ping"
+        };
+
+        var selectButton = new Button(() =>
+        {
+            Selection.activeObject = record.Asset;
+        })
+        {
+            text = "Select"
+        };
+
+        assetDetailPane.Add(pingButton);
+        assetDetailPane.Add(selectButton);
     }
 
     private void BuildContentIdIndex()
@@ -497,6 +578,47 @@ public class PetEditorWindow : EditorWindow
            Severity = ValidationSeverity.Error,
            Message = $"Evolution cycle detected from '{id}'."
         });
+    }
+
+#endregion
+
+#region Scanner
+
+    private void RescanAssets()
+    {
+        assetRecords.Clear();
+
+        ScanAssets<GameObject>("t:prefab", "prefab");
+        ScanAssets<Sprite>("t:sprite", "Sprite");
+        ScanAssets<Material>("t:Material", "Material");
+        ScanAssets<RuntimeAnimatorController>("t:RuntimeAnimatorController", "AnimatorController");
+
+        assetListView.itemsSource = assetRecords;
+        assetListView.Rebuild();
+    }
+
+    private void ScanAssets<T>(string filter, string assetType) where T : UnityEngine.Object
+    {
+        string[] guids = AssetDatabase.FindAssets(filter, new[] {ArtContentRoot});
+
+        foreach(string guid in guids)
+        {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+
+            T asset = AssetDatabase.LoadAssetAtPath<T>(path);
+
+            if(asset == null)
+                continue;
+
+            assetRecords.Add(new AssetRecord
+            {
+                Guid = guid,
+                Path = path,
+                Name = asset.name,
+                AssetType= assetType,
+                Asset = asset
+            });
+        }
     }
 
 #endregion
