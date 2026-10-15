@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
+using NPOI.SS.Formula.Functions;
+using NUnit.Framework;
 
 public class ArtContentToolWindow  : EditorWindow
 {
@@ -37,6 +39,12 @@ public class ArtContentToolWindow  : EditorWindow
     private VisualElement assetDetailPane;
     private Image assetPreview;
     private AssetRecord previewAssetRecord; 
+
+    private bool hasScannedAssets = false;
+    private readonly Dictionary<string, List<AssetRecord>> assetsByTypeAndName = new();
+
+    //Mapping Cache
+    private readonly Dictionary<ContentRecord, ContentAssetMapping> contentAssetMappings = new();
 
     private const string ArtContentRoot = "Assets/Game/Arts";
 
@@ -103,6 +111,8 @@ public class ArtContentToolWindow  : EditorWindow
         listView.Rebuild();
 
         rightPane.Clear();
+
+        RebuildContentAssetMappings();
     }
 
     private void BuildContentView()
@@ -364,6 +374,8 @@ public class ArtContentToolWindow  : EditorWindow
 
         rightPane.Add(
             new Label($"Source: {record.Source.SourceId}"));
+
+        ShowAssetMapping(record);
 
         rightPane.Add(contentValidationContainer);
 
@@ -669,10 +681,14 @@ public class ArtContentToolWindow  : EditorWindow
         ScanAssets<Material>("t:Material", "Material");
         ScanAssets<RuntimeAnimatorController>("t:RuntimeAnimatorController", "AnimatorController");
 
+        hasScannedAssets = true;
+
         ApplyAssetFilter();
+
+        RebuildContentAssetMappings();
     }
 
-    private void ScanAssets<T>(string filter, string assetType) where T : UnityEngine.Object
+    private void ScanAssets<T>(string filter, string assetType) where T : Object
     {
         string[] guids = AssetDatabase.FindAssets(filter, new[] {ArtContentRoot});
 
@@ -738,6 +754,140 @@ public class ArtContentToolWindow  : EditorWindow
             return true;
 
         return record.AssetType == type;
+    }
+
+#endregion
+
+#region Mapping
+
+    private string BuildAssetLookupKey(string assetType, string assetName)
+    {   
+        //composite key
+        return $"{assetType}:{assetName}";
+    }
+
+    private void BuildAssetIndex()
+    {
+        assetsByTypeAndName.Clear();
+
+        foreach(var asset in assetRecords)
+        {
+            string key = BuildAssetLookupKey(asset.AssetType, asset.Name);
+
+            if(!assetsByTypeAndName.TryGetValue(key, out var sameAssets))
+            {
+                sameAssets = new List<AssetRecord>();
+                assetsByTypeAndName.Add(key, sameAssets);
+            }
+
+            sameAssets.Add(asset);
+        }
+    }
+
+    private AssetReferenceMatch ResolveAssetReference(string key, string expectedType)
+    {
+        var result = new AssetReferenceMatch
+        {
+            Key = key,
+            ExpectedType = expectedType
+        };
+
+        if (!hasScannedAssets)
+        {
+            result.Status = AssetMatchStatus.NotScanned;
+            return result;
+        }
+
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            result.Status = AssetMatchStatus.Missing;
+            return result;
+        }
+
+        string lookupKey = BuildAssetLookupKey(expectedType, key);
+
+        if(!assetsByTypeAndName.TryGetValue(lookupKey, out var matches))
+        {
+            result.Status = AssetMatchStatus.Missing;
+            return result;
+        }
+
+        result.Matches.AddRange(matches);
+
+        if(matches.Count == 1)
+        {
+            result.Status = AssetMatchStatus.Matched;
+        }
+        else
+        {
+            result.Status = AssetMatchStatus.Ambiguous;
+        }
+
+        return result;
+    }
+
+    private ContentAssetMapping BuildContentAssetMapping(ContentRecord content)
+    {
+        return new ContentAssetMapping
+        {
+            Content = content,
+            Prefab = ResolveAssetReference(content.Definition.PrefabKey, "Prefab"),
+            Icon = ResolveAssetReference(content.Definition.IconKey, "Sprite")
+        };
+    }
+
+    private void RebuildContentAssetMappings()
+    {
+        contentAssetMappings.Clear();
+
+        BuildAssetIndex();
+
+        foreach(var content in contents)
+        {
+            contentAssetMappings[content] = BuildContentAssetMapping(content);
+        }
+    }
+
+    private void ShowAssetMapping(ContentRecord record)
+    {
+        rightPane.Add(
+            new Label("[Asset Mapping]"));
+
+        if(!contentAssetMappings.TryGetValue(record, out var mapping))
+        {
+            rightPane.Add(
+                new Label("Mapping unavailable"));
+            return;
+        }
+
+        rightPane.Add(
+            new Label(
+                $"Prefab: {FormatAssetMatch(mapping.Prefab)}"));
+
+        rightPane.Add(
+            new Label(
+                $"Icon: {FormatAssetMatch(mapping.Icon)}"));
+    }
+
+    private string FormatAssetMatch(AssetReferenceMatch match)
+    {
+        switch (match.Status)
+        {
+            case AssetMatchStatus.NotScanned:
+                return "Not scanned";
+
+            case AssetMatchStatus.Missing:
+                return $"Missing: {match.Key}";
+
+            case AssetMatchStatus.Ambiguous:
+                return $"Ambiguous: {match.Matches.Count} matches";
+
+            case AssetMatchStatus.Matched:
+                return $"Matched: {match.Matches[0].Path}";
+
+            default:
+                return "unUnknown";
+        }
     }
 
 #endregion
