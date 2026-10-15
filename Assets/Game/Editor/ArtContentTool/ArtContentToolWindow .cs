@@ -25,13 +25,18 @@ public class ArtContentToolWindow  : EditorWindow
     private ListView listView;
     private VisualElement contentValidationContainer;
     private Label contentCount;
+    private TextField assetSearchField;
+    private DropdownField assetTypeFilter;
 
     private readonly Dictionary<ContentRecord, List<ValidationResult>> validationCache = new();
     private readonly Dictionary<string, List<ContentRecord>> contentsById = new();
 
     private readonly List<AssetRecord> assetRecords = new();
+    private readonly List<AssetRecord> filterAssetRecords = new();
     private ListView assetListView;
     private VisualElement assetDetailPane;
+    private Image assetPreview;
+    private AssetRecord previewAssetRecord; 
 
     private const string ArtContentRoot = "Assets/Game/Arts";
 
@@ -223,27 +228,63 @@ public class ArtContentToolWindow  : EditorWindow
             text = "Rescan Assets"
         };
 
+        assetSearchField = new TextField()
+        {
+            value = ""  
+        };
+
+        assetSearchField.RegisterValueChangedCallback( _ =>
+        {
+           ApplyAssetFilter(); 
+        });
+
+        var searchRow = new VisualElement();
+        searchRow.style.flexDirection = FlexDirection.Row;
+
+        searchRow.Add(new Label("Search"));
+        searchRow.Add(assetSearchField);
+
         artAssetsView.Add(rescanButton);
+        artAssetsView.Add(searchRow);
 
         var splitView = new TwoPaneSplitView(0, 180, TwoPaneSplitViewOrientation.Horizontal);
         var leftPane = new VisualElement();
         assetDetailPane = new VisualElement();
 
+        assetTypeFilter = new DropdownField(
+            "Type",
+            new List<string>
+            {
+                "All",
+                "Prefab",
+                "Sprite",
+                "Material",
+                "AnimatorController"
+            },
+            0
+        );
+
+        assetTypeFilter.RegisterValueChangedCallback(_ =>
+        {
+            ApplyAssetFilter();
+        });
+
         assetListView = new ListView
         {
-            itemsSource = assetRecords,
+            itemsSource = filterAssetRecords,
             makeItem = () => new Label(),  
             bindItem = (element, index) =>
             {
                 var label = (Label)element;
-                var record = assetRecords[index];
+                var record = filterAssetRecords[index];
 
                 label.text = $"{record.AssetType} | {record.Name}";
             },
 
             selectionType = SelectionType.Single
         };
-
+        
+        leftPane.Add(assetTypeFilter);
         leftPane.Add(assetListView);
 
         splitView.Add(leftPane);
@@ -345,6 +386,18 @@ public class ArtContentToolWindow  : EditorWindow
         assetDetailPane.Add(
             new Label($"GUID: {record.Guid}"));
 
+        assetPreview = new Image
+        {
+            scaleMode = ScaleMode.ScaleToFit            
+        };
+
+        assetPreview.style.width = 200;
+        assetPreview.style.height = 200;
+
+        assetDetailPane.Add(assetPreview);
+
+        RefreshAssetPreview(record);
+
         var pingButton = new Button(() =>
         {
             EditorGUIUtility.PingObject(record.Asset);
@@ -384,6 +437,29 @@ public class ArtContentToolWindow  : EditorWindow
 
             sameIdContents.Add(content);
         }
+    }
+
+    private void RefreshAssetPreview(AssetRecord record)
+    {
+        previewAssetRecord = record;
+
+        if(record?.Asset == null)
+        {
+            assetPreview = null;
+            return;
+        }
+
+        var preview = AssetPreview.GetAssetPreview(record.Asset);
+
+        if(preview != null)
+        {
+            assetPreview.image = preview;
+            return;
+        }
+
+        var miniThumbnail = AssetPreview.GetMiniThumbnail(record.Asset);
+
+        assetPreview.image = miniThumbnail;
     }
 
 #region Validation 
@@ -588,13 +664,12 @@ public class ArtContentToolWindow  : EditorWindow
     {
         assetRecords.Clear();
 
-        ScanAssets<GameObject>("t:prefab", "prefab");
+        ScanAssets<GameObject>("t:prefab", "Prefab");
         ScanAssets<Sprite>("t:sprite", "Sprite");
         ScanAssets<Material>("t:Material", "Material");
         ScanAssets<RuntimeAnimatorController>("t:RuntimeAnimatorController", "AnimatorController");
 
-        assetListView.itemsSource = assetRecords;
-        assetListView.Rebuild();
+        ApplyAssetFilter();
     }
 
     private void ScanAssets<T>(string filter, string assetType) where T : UnityEngine.Object
@@ -619,6 +694,50 @@ public class ArtContentToolWindow  : EditorWindow
                 Asset = asset
             });
         }
+    }
+
+    private void ApplyAssetFilter()
+    {
+        filterAssetRecords.Clear();
+
+        string search = assetSearchField?.value?.Trim();
+
+        string type = assetTypeFilter?.value ?? "All";
+
+        foreach(var record in assetRecords)
+        {
+            if(!MatchesSearch(record, search))
+                continue;
+
+            if(!MatchesType(record, type))
+                continue;
+
+            filterAssetRecords.Add(record);
+        }
+
+        assetListView.itemsSource = filterAssetRecords;
+        assetListView.Rebuild();
+
+        assetDetailPane.Clear();
+    }
+
+    private bool MatchesSearch(AssetRecord record, string search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+            return true;
+
+        return 
+            record.Name.Contains(search, System.StringComparison.OrdinalIgnoreCase) || 
+            record.Path.Contains(search, System.StringComparison.OrdinalIgnoreCase);
+        
+    }
+
+    private bool MatchesType(AssetRecord record, string type)
+    {
+        if(type == "All")
+            return true;
+
+        return record.AssetType == type;
     }
 
 #endregion
