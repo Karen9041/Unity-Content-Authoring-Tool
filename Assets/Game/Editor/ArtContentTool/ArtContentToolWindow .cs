@@ -895,7 +895,6 @@ public class ArtContentToolWindow  : EditorWindow
 
 #region Prefab Contract
 
-    //Prefab Contract Validation
     private PrefabContractResult ValidatePrefabContract(ContentAssetMapping mapping)
     {
         var result = new PrefabContractResult
@@ -906,13 +905,7 @@ public class ArtContentToolWindow  : EditorWindow
         //Not Matched
         if(mapping.Prefab.Status != AssetMatchStatus.Matched)
         {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Prefab must resolve to exactly one asset before contract validation."
-            });
-
+            AddError(result, "Prefab must resolve to exactly one asset before contract validation.");
             return result;
         }
 
@@ -921,71 +914,18 @@ public class ArtContentToolWindow  : EditorWindow
 
         if(prefab == null)
         {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Resolved asset is not a GameObject prefab."
-            });
-
+            AddError(result, "Resolved asset is not a GameObject prefab.");
             return result;
         }
 
-        //Missing Script
-        int missingScriptCount = CountMissingScripts(prefab);
-
-        if(missingScriptCount > 0)
+        if(!TryGetReferenceComponent(prefab, result, out var references))
         {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = $"Prefab contains {missingScriptCount} missing script(s)."
-            });
-        }
-
-        var references = prefab.GetComponent<ContentPrefabReferences>();
-
-        if(references == null)
-        {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult{
-                Severity = ValidationSeverity.Error,
-                Message = "ContentPrefabReferences component is missing."
-            });
-
             return result;
         }
 
-        if(references.Animator == null)
-        {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "Animator reference is missing."
-            });
-        }
-
-        if(references.MainRenderer == null)
-        {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "MainRenderer reference is missing."
-            });
-        }
-
-        if(references.RootBone == null)
-        {
-            result.IsValid = false;
-            result.Issues.Add(new ValidationResult
-            {
-                Severity = ValidationSeverity.Error,
-                Message = "RootBone reference is missing."
-            });
-        }
+        ValidateMissingScripts(prefab, result);
+        ValidateAnimator(prefab, references, result);
+        ValidateRenderer(prefab, references, result);
 
         return result;
     }
@@ -1016,10 +956,104 @@ public class ArtContentToolWindow  : EditorWindow
         foreach(var transform in root.GetComponentsInChildren<Transform>(true))
         {
             total += GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject);
-            return total;
         }
 
         return total;
+    }
+
+    private bool IsChildOfPrefab(GameObject prefab, Component component)
+    {
+        if(component == null)
+            return false;
+
+        return component.transform == prefab.transform || component.transform.IsChildOf(prefab.transform);
+    }
+
+    private bool TryGetReferenceComponent(
+        GameObject prefab, 
+        PrefabContractResult result, 
+        out ContentPrefabReferences references)
+    {
+        references = prefab.GetComponent<ContentPrefabReferences>();
+
+        if(references != null)
+            return true;
+
+        AddError(result, "ContentPrefabReferences component is missing.");        
+        return false;
+    }
+
+    private void ValidateAnimator(
+        GameObject prefab,
+        ContentPrefabReferences references, 
+        PrefabContractResult result)
+    {
+        if(references.Animator == null)
+        {
+            AddError(result, "Animator reference is missing.");
+            return;
+        }
+
+        if(!IsChildOfPrefab(prefab, references.Animator))
+        {
+            AddError(result, "Animator reference is outside hierarchy.");
+        }
+
+        if(references.Animator.runtimeAnimatorController == null)
+        {
+            AddError(result, "Animator Controller is missing.");
+        }
+
+    }
+
+    private void ValidateRenderer(
+        GameObject prefab,
+        ContentPrefabReferences references, 
+        PrefabContractResult result
+    )
+    {
+
+        if(references.MainRenderer == null)
+        {
+            AddError(result, "MainRenderer reference is missing.");
+            return;
+        }
+
+        if(!IsChildOfPrefab(prefab, references.MainRenderer))
+        {
+            AddError(result, "MainRenderer reference is outside hierarchy.");
+        }
+
+        if(references.MainRenderer.rootBone == null)
+        {
+            AddError(result, "SkinnedMeshRenderer rootBone is missing.");
+        }
+
+        if(references.MainRenderer.bones == null || references.MainRenderer.bones.Length == 0)
+        {
+            AddError(result, "SkinnedMeshRenderer has no bones.");
+        }
+    }
+
+    private void ValidateMissingScripts(GameObject prefab, PrefabContractResult result)
+    {
+        int missingScriptCount = CountMissingScripts(prefab);
+
+        if(missingScriptCount > 0)
+        {
+            AddError(result, $"Prefab contains {missingScriptCount} missing script(s).");
+        }
+    }
+
+    private void AddError(PrefabContractResult result, string message)
+    {
+        result.IsValid = false;
+
+        result.Issues.Add(new ValidationResult
+        {
+            Severity = ValidationSeverity.Error,
+            Message = message
+        });
     }
 
 #endregion
