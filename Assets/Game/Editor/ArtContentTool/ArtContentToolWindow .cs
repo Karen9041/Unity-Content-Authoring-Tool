@@ -3,8 +3,6 @@ using UnityEngine;
 using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
-using NPOI.SS.Formula.Functions;
-using NUnit.Framework;
 
 public class ArtContentToolWindow  : EditorWindow
 {
@@ -784,6 +782,7 @@ public class ArtContentToolWindow  : EditorWindow
         }
     }
 
+    //Asset Mapping Validation
     private AssetReferenceMatch ResolveAssetReference(string key, string expectedType)
     {
         var result = new AssetReferenceMatch
@@ -867,6 +866,8 @@ public class ArtContentToolWindow  : EditorWindow
         rightPane.Add(
             new Label(
                 $"Icon: {FormatAssetMatch(mapping.Icon)}"));
+
+        ShowPrefabContract(mapping);
     }
 
     private string FormatAssetMatch(AssetReferenceMatch match)
@@ -888,6 +889,137 @@ public class ArtContentToolWindow  : EditorWindow
             default:
                 return "unUnknown";
         }
+    }
+
+#endregion
+
+#region Prefab Contract
+
+    //Prefab Contract Validation
+    private PrefabContractResult ValidatePrefabContract(ContentAssetMapping mapping)
+    {
+        var result = new PrefabContractResult
+        {
+            IsValid = true
+        };
+
+        //Not Matched
+        if(mapping.Prefab.Status != AssetMatchStatus.Matched)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Prefab must resolve to exactly one asset before contract validation."
+            });
+
+            return result;
+        }
+
+        var prefabRecord = mapping.Prefab.Matches[0];
+        var prefab = prefabRecord.Asset as GameObject;
+
+        if(prefab == null)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Resolved asset is not a GameObject prefab."
+            });
+
+            return result;
+        }
+
+        //Missing Script
+        int missingScriptCount = CountMissingScripts(prefab);
+
+        if(missingScriptCount > 0)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = $"Prefab contains {missingScriptCount} missing script(s)."
+            });
+        }
+
+        var references = prefab.GetComponent<ContentPrefabReferences>();
+
+        if(references == null)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult{
+                Severity = ValidationSeverity.Error,
+                Message = "ContentPrefabReferences component is missing."
+            });
+
+            return result;
+        }
+
+        if(references.Animator == null)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "Animator reference is missing."
+            });
+        }
+
+        if(references.MainRenderer == null)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "MainRenderer reference is missing."
+            });
+        }
+
+        if(references.RootBone == null)
+        {
+            result.IsValid = false;
+            result.Issues.Add(new ValidationResult
+            {
+                Severity = ValidationSeverity.Error,
+                Message = "RootBone reference is missing."
+            });
+        }
+
+        return result;
+    }
+
+    private void ShowPrefabContract(ContentAssetMapping mapping)
+    {
+        rightPane.Add(new Label("[Prefab Contract]"));
+
+        var result = ValidatePrefabContract(mapping);
+
+        if (result.IsValid)
+        {
+            rightPane.Add(new Label("✓ Runtime prefab contract valid"));
+            return;
+        }
+
+        foreach (var issue in result.Issues)
+        {
+            rightPane.Add(
+                new Label($"[{issue.Severity}] {issue.Message}")
+            );
+        }
+    }
+
+    private int CountMissingScripts(GameObject root)
+    {
+        int total = 0;
+        foreach(var transform in root.GetComponentsInChildren<Transform>(true))
+        {
+            total += GameObjectUtility.GetMonoBehavioursWithMissingScriptCount(transform.gameObject);
+            return total;
+        }
+
+        return total;
     }
 
 #endregion

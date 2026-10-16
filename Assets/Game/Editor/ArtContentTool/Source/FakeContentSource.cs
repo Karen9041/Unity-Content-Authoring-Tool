@@ -158,6 +158,25 @@ public class FakeContentSource : IContentSource
                 }
             });
 
+        result.Records.Add(new ContentRecord
+            {
+                Definition = new ContentDefinition
+                {
+                    Id = "pet_007",
+                    Name = "Pet_MissingScript",
+                    EvolutionFromId = null,
+                    EvolutionToId = null,
+                    PrefabKey = "Pet_MissingScript",
+                    IconKey = "Icon_Dog"
+                },
+
+                Source = new ContentSourceHandle
+                {
+                    SourceType = "Fake",
+                    SourceId = "Fake:pet_007"
+                }
+            });
+
         return result;
     }
 }
