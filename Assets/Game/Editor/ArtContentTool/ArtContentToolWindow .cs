@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEditor;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
+using System.Runtime;
 
 public class ArtContentToolWindow  : EditorWindow
 {
@@ -922,7 +923,8 @@ public class ArtContentToolWindow  : EditorWindow
         {
             return result;
         }
-
+        
+        ValidatePrefabAssetType(prefab, result);
         ValidateMissingScripts(prefab, result);
         ValidateAnimator(prefab, references, result);
         ValidateRenderer(prefab, references, result);
@@ -936,10 +938,19 @@ public class ArtContentToolWindow  : EditorWindow
 
         var result = ValidatePrefabContract(mapping);
 
-        if (result.IsValid)
+        bool hasWarning = result.Issues.Exists(issue => issue.Severity == ValidationSeverity.Warning);
+
+        if (!result.IsValid)
+        {
+            rightPane.Add(new Label("✕ Prefab contract invalid"));
+        }
+        else if (hasWarning)
+        {
+            rightPane.Add(new Label("⚠ Valid with warnings"));
+        }
+        else
         {
             rightPane.Add(new Label("✓ Runtime prefab contract valid"));
-            return;
         }
 
         foreach (var issue in result.Issues)
@@ -969,6 +980,16 @@ public class ArtContentToolWindow  : EditorWindow
         return component.transform == prefab.transform || component.transform.IsChildOf(prefab.transform);
     }
 
+    private bool IsPartOfNestedPrefab(GameObject prefabRoot, Component component)
+    {
+        var nearestPrefabRoot = PrefabUtility.GetNearestPrefabInstanceRoot(component.gameObject);
+
+        if(nearestPrefabRoot == null)
+            return false;
+
+        return nearestPrefabRoot != prefabRoot;
+    }
+
     private bool TryGetReferenceComponent(
         GameObject prefab, 
         PrefabContractResult result, 
@@ -994,9 +1015,21 @@ public class ArtContentToolWindow  : EditorWindow
             return;
         }
 
+        var animators = prefab.GetComponentsInChildren<Animator>(true);
+
+        if(animators.Length > 1)
+        {
+            AddWarning(result, $"Prefab contains multiple Animator components ({animators.Length}).");
+        }
+
         if(!IsChildOfPrefab(prefab, references.Animator))
         {
             AddError(result, "Animator reference is outside hierarchy.");
+        }
+
+        if(IsPartOfNestedPrefab(prefab, references.Animator))
+        {
+            AddWarning(result, "Animator is belong to nested prefab instance.");
         }
 
         if(references.Animator.runtimeAnimatorController == null)
@@ -1019,9 +1052,21 @@ public class ArtContentToolWindow  : EditorWindow
             return;
         }
 
+        var mainRenders = prefab.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+
+        if(mainRenders.Length > 1)
+        {
+            AddWarning(result, $"Prefab contains multiple SkinnedMeshRenderer components ({mainRenders.Length}).");
+        }
+
         if(!IsChildOfPrefab(prefab, references.MainRenderer))
         {
             AddError(result, "MainRenderer reference is outside hierarchy.");
+        }
+
+        if(IsPartOfNestedPrefab(prefab, references.MainRenderer))
+        {
+            AddWarning(result, "SkinnedMeshRenderer is belong to nested prefab instance.");
         }
 
         if(references.MainRenderer.rootBone == null)
@@ -1045,6 +1090,16 @@ public class ArtContentToolWindow  : EditorWindow
         }
     }
 
+    private void ValidatePrefabAssetType(GameObject prefab, PrefabContractResult result)
+    {
+        var prefabType = PrefabUtility.GetPrefabAssetType(prefab);
+
+        if(prefabType == PrefabAssetType.NotAPrefab)
+        {
+            AddError(result, "Resolved GameObject is not a prefab asset.");
+        }
+    }
+
     private void AddError(PrefabContractResult result, string message)
     {
         result.IsValid = false;
@@ -1052,6 +1107,15 @@ public class ArtContentToolWindow  : EditorWindow
         result.Issues.Add(new ValidationResult
         {
             Severity = ValidationSeverity.Error,
+            Message = message
+        });
+    }
+
+    private void AddWarning(PrefabContractResult result, string message)
+    {
+        result.Issues.Add(new ValidationResult
+        {
+            Severity = ValidationSeverity.Warning,
             Message = message
         });
     }
