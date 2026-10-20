@@ -39,7 +39,7 @@ public class ArtContentToolWindow  : EditorWindow
     private Image assetPreview;
     private AssetRecord previewAssetRecord; 
 
-    private bool hasScannedAssets = false;
+    private bool hasScannedAssets;
     private readonly Dictionary<string, List<AssetRecord>> assetsByTypeAndName = new();
 
     //Mapping Cache
@@ -56,9 +56,11 @@ public class ArtContentToolWindow  : EditorWindow
     public void CreateGUI()
     {
         contentSource = new FakeContentSource();
+        hasScannedAssets = false;
 
         RefreshContentList();
         ValidateAllContents();
+        RebuildContentAssetMappings();
 
         BuildToolbar();
         BuildContentView();
@@ -869,6 +871,7 @@ public class ArtContentToolWindow  : EditorWindow
                 $"Icon: {FormatAssetMatch(mapping.Icon)}"));
 
         ShowPrefabContract(mapping);
+        ShowRuntimeAddress(mapping);
     }
 
     private string FormatAssetMatch(AssetReferenceMatch match)
@@ -1118,6 +1121,21 @@ public class ArtContentToolWindow  : EditorWindow
             Severity = ValidationSeverity.Warning,
             Message = message
         });
+    }
+
+#endregion
+
+# region Runtime Address
+
+    private void ShowRuntimeAddress(ContentAssetMapping mapping)
+    {
+        rightPane.Add(new Label("[Runtime Address]"));
+
+        var validator = new AddressRegistrationValidator();
+        var result = validator.Validate(mapping);
+
+        rightPane.Add(new Label($"Status: {result.Status}"));
+        rightPane.Add(new Label(result.Message));
     }
 
 #endregion
