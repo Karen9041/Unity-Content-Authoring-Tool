@@ -93,6 +93,10 @@ public class ArtContentToolWindow  : EditorWindow
 
         toolbar.Add(contentButton);
         toolbar.Add(artAssetsButton);
+        toolbar.Add(new Button(CreateContentWindow.Open)
+        {
+            text = "Create Content"
+        });
 
         rootVisualElement.Add(toolbar);
     }
