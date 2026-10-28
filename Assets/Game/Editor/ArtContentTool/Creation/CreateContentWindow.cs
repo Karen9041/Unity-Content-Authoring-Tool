@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using PlasticPipe.PlasticProtocol.Server.Stubs;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -77,7 +78,6 @@ public class CreateContentWindow : EditorWindow
         RefreshDraftView();
     }
 
-    // Exercise entry: source selection -> reset old results -> discovery -> state -> preview.
     private void OnSourceModelChanged(GameObject sourceModel)
     {
         draft.SourceModelPrefab = sourceModel;
@@ -93,16 +93,13 @@ public class CreateContentWindow : EditorWindow
 
         RefreshDraftView();
     }
-
-    /// <summary>
-    /// GUIDED TODO: implement discovery here, reading sourceModel without modifying it.
-    /// Return the discovered renderers, including an empty list for a completed scan
-    /// with no matches. Null means discovery has not been implemented/executed.
-    /// Decide how inactive children and nested hierarchy should be handled.
-    /// </summary>
+    
     private List<SkinnedMeshRenderer> DiscoverSourceRenderers(GameObject sourceModel)
     {
-        return null;
+        var results = new List<SkinnedMeshRenderer>();
+        sourceModel.GetComponentsInChildren(true, results);
+
+        return results;
     }
 
     private void ApplyRendererDiscovery(List<SkinnedMeshRenderer> renderers)
