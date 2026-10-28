@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using PlasticPipe.PlasticProtocol.Server.Stubs;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -12,6 +11,9 @@ public class CreateContentWindow : EditorWindow
 
     private VisualElement validationContainer;
     private VisualElement draftPreview;
+    private Button createButton;
+    private HelpBox creationResult;
+    private GameObject createdAsset;
 
     public static void Open()
     {
@@ -26,9 +28,9 @@ public class CreateContentWindow : EditorWindow
         rootVisualElement.Clear();
         var scrollView = new ScrollView();
         rootVisualElement.Add(scrollView);
-        scrollView.Add(new Label("Create Content — M1 Draft"));
+        scrollView.Add(new Label("Create Content — Prefab Variant"));
         scrollView.Add(new HelpBox(
-            "Draft only. Renderer discovery is a guided implementation exercise.",
+            "Creates a Prefab Variant from the selected Base Template and adds the Source Model as a nested prefab.\n Existing assets will not be overwritten.",
             HelpBoxMessageType.Info));
 
         var contentType = new TextField("Content Type (integer)") { value = contentTypeInput };
@@ -75,9 +77,27 @@ public class CreateContentWindow : EditorWindow
         draftPreview = new VisualElement();
         scrollView.Add(validationContainer);
         scrollView.Add(draftPreview);
+        AddCreationControls(scrollView);
         RefreshDraftView();
     }
 
+    private void AddCreationControls(VisualElement parent)
+    {
+        creationResult = new HelpBox("No variant created yet. Complete the required fields, then click Create Variant.", HelpBoxMessageType.Info);
+        createButton = new Button(() =>
+        {
+            var result = ContentVariantCreator.Create(draft);
+            createdAsset = result.Asset;
+            creationResult.text = result.Message;
+            creationResult.messageType = result.Status == VariantCreationStatus.Succeeded
+                ? HelpBoxMessageType.Info : HelpBoxMessageType.Warning;
+            RefreshDraftView();
+        }) { text = "Create Variant" };
+        parent.Add(createButton);
+        parent.Add(creationResult);
+        parent.Add(new Button(() => { if (createdAsset != null) EditorGUIUtility.PingObject(createdAsset); }) { text = "Ping Created Variant" });
+        parent.Add(new Button(() => { if (createdAsset != null) Selection.activeObject = createdAsset; }) { text = "Select Created Variant" });
+    }
     private void OnSourceModelChanged(GameObject sourceModel)
     {
         draft.SourceModelPrefab = sourceModel;
@@ -157,8 +177,11 @@ public class CreateContentWindow : EditorWindow
         foreach (var result in results)
             validationContainer.Add(new HelpBox(result.Message, HelpBoxMessageType.Error));
 
-        if (results.Count == 0)
-            validationContainer.Add(new Label("Required fields are valid. Draft only; no assets are created."));
+        var creationErrors = ContentVariantCreator.Validate(draft, out var outputPath);
+        foreach (var error in creationErrors)
+            validationContainer.Add(new HelpBox(error, HelpBoxMessageType.Error));
+        validationContainer.Add(new Label($"Output: {outputPath ?? "Invalid ID"}"));
+        createButton?.SetEnabled(results.Count == 0 && creationErrors.Count == 0);
 
         RefreshDraftPreview();
     }
