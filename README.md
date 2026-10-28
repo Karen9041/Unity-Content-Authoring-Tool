@@ -100,3 +100,25 @@ Excel 的**第二列作為欄名，第三列開始作為資料**；第一列不�
 - Excel 路徑、工作表名稱與美術掃描目錄目前固定於程式中。
 - 來源診斷與內容規則已有區分，但規則與部分 UI／資料處理仍集中在視窗類別。
 - Excel 容錯、診斷列號與必要欄位定義仍待統一；不建議直接套用未符合上述格式的工作表。
+
+
+## 第三方資源
+
+此專案有使用第三方資源進行 Unity Editor Tooling 開發、測試、展示。
+
+### Quaternius — Ultimate Animated Character Pack - Nov 2019
+
+- Creator: Quaternius
+- Source: https://quaternius.com/packs/ultimatedanimatedcharacter.html
+- License: Creative Commons Zero (CC0 1.0)
+- Usage: Character model, skeleton, renderer discovery, and prefab authoring tests.
+- License record: ThirdParty/Quaternius/License - Ultimate Animated Character Pack.txt
+- Acquired on: 2026-10-28
+
+### Quaternius — Pirate Kit - Nov 2023
+
+- Creator: Quaternius
+- Source: https://quaternius.com/packs/piratekit.html
+- License: Creative Commons Zero (CC0 1.0)
+- Usage: Character model, skeleton, renderer discovery, and prefab authoring tests.
+- Acquired on: 2026-10-28
