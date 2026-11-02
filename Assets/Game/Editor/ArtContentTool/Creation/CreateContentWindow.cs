@@ -14,6 +14,15 @@ public class CreateContentWindow : EditorWindow
     private Button createButton;
     private HelpBox creationResult;
     private GameObject createdAsset;
+    private ContentReferenceAuthoringView referenceView;
+
+    private void OnEnable() => Undo.undoRedoPerformed += OnDraftUndo;
+    private void OnDisable() => Undo.undoRedoPerformed -= OnDraftUndo;
+    private void OnDraftUndo()
+    {
+        // Rebuild fields too: Undo may replace serialized nested Draft objects.
+        if (validationContainer != null) CreateGUI();
+    }
 
     public static void Open()
     {
@@ -58,7 +67,10 @@ public class CreateContentWindow : EditorWindow
         };
         baseTemplate.RegisterValueChangedCallback(evt =>
         {
+            Undo.RecordObject(this, "Change content Template");
             draft.BaseTemplatePrefab = evt.newValue as GameObject;
+            draft.References = ContentReferenceAuthoring.Inspect(draft.BaseTemplatePrefab);
+            referenceView?.Refresh();
             RefreshDraftView();
         });
         scrollView.Add(baseTemplate);
@@ -77,6 +89,11 @@ public class CreateContentWindow : EditorWindow
         draftPreview = new VisualElement();
         scrollView.Add(validationContainer);
         scrollView.Add(draftPreview);
+        draft.References ??= new ReferenceAuthoringDraft();
+        if (!draft.References.Inspected && draft.BaseTemplatePrefab != null)
+            draft.References = ContentReferenceAuthoring.Inspect(draft.BaseTemplatePrefab);
+        referenceView = new ContentReferenceAuthoringView(draft, this, RefreshDraftView);
+        scrollView.Add(referenceView);
         AddCreationControls(scrollView);
         RefreshDraftView();
     }
@@ -100,6 +117,7 @@ public class CreateContentWindow : EditorWindow
     }
     private void OnSourceModelChanged(GameObject sourceModel)
     {
+        Undo.RecordObject(this, "Change Source Model");
         draft.SourceModelPrefab = sourceModel;
         draft.Renderers.Clear();
         draft.HasDiscoveredRenderers = false;
@@ -111,6 +129,7 @@ public class CreateContentWindow : EditorWindow
                 ApplyRendererDiscovery(renderers);
         }
 
+        referenceView?.Refresh();
         RefreshDraftView();
     }
     
@@ -182,6 +201,12 @@ public class CreateContentWindow : EditorWindow
             validationContainer.Add(new HelpBox(error, HelpBoxMessageType.Error));
         validationContainer.Add(new Label($"Output: {outputPath ?? "Invalid ID"}"));
         createButton?.SetEnabled(results.Count == 0 && creationErrors.Count == 0);
+        var referenceBlock = ContentReferenceAuthoring.Preflight(draft);
+        if (referenceBlock != null)
+        {
+            validationContainer.Add(new HelpBox(referenceBlock, HelpBoxMessageType.Warning));
+            createButton?.SetEnabled(false);
+        }
 
         RefreshDraftPreview();
     }
@@ -193,8 +218,8 @@ public class CreateContentWindow : EditorWindow
         draftPreview.Add(new Label("[Draft Preview]"));
         draftPreview.Add(new Label($"Content Type: {(draft.HasContentType ? draft.ContentType.ToString() : "Not set / invalid")}"));
         draftPreview.Add(new Label($"Content ID: {draft.Id}"));
-        draftPreview.Add(new Label($"Base Template: {draft.BaseTemplatePrefab?.name ?? "None"}"));
-        draftPreview.Add(new Label($"Source Model: {draft.SourceModelPrefab?.name ?? "None"}"));
+        draftPreview.Add(new Label($"Base Template: {(draft.BaseTemplatePrefab != null ? draft.BaseTemplatePrefab.name : "None")}"));
+        draftPreview.Add(new Label($"Source Model: {(draft.SourceModelPrefab != null ? draft.SourceModelPrefab.name : "None")}"));
 
         if (!IsPrefabAsset(draft.SourceModelPrefab))
             draftPreview.Add(new Label("Select a valid Source Model prefab asset to begin."));

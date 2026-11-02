@@ -28,7 +28,7 @@ public static class ContentVariantCreatorChecks
         Check(ContentVariantCreator.Create(new ContentCreationDraft()).Status == VariantCreationStatus.InvalidInput,
             "invalid draft must not enter core");
         
-        Debug.Log("M2.1 safe checks passed. Prefab creation and post-save checks require the user implementation.");
+        Debug.Log("M2.1 safe checks passed. These checks do not save assets.");
     }
 
     private static void Check(bool condition, string name)

@@ -112,3 +112,6 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Reference Authoring integration-test outputs (fixtures remain versioned).
+/Assets/Game/GeneratedContent/Type_2202/Content_RA_Test_*.prefab*

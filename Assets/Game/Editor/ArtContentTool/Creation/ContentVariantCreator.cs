@@ -107,6 +107,12 @@ public static class ContentVariantCreator
         if (errors.Count != 0) 
             return new VariantCreationResult(VariantCreationStatus.InvalidInput, string.Join("\n", errors), path);
 
+        var referenceErrors = ContentReferenceAuthoring.Validate(draft);
+        if (referenceErrors.Count != 0)
+            return new VariantCreationResult(VariantCreationStatus.InvalidInput, string.Join("\n", referenceErrors), path);
+        if (draft.References.NeedsApply && !ContentReferenceAuthoring.ApplyImplementationReady)
+            return new VariantCreationResult(VariantCreationStatus.NotImplemented, ContentReferenceAuthoring.ApplyNotImplemented, path);
+
         var stage = "capture input fingerprints";
 
         try
@@ -118,14 +124,27 @@ public static class ContentVariantCreator
 
             stage = "create variant";
 
-            var result = CreateVariantFromTemplate(draft.BaseTemplatePrefab, draft.SourceModelPrefab, path);
+            var result = CreateVariantFromTemplate(draft.BaseTemplatePrefab, draft.SourceModelPrefab, path, draft);
 
             if (result.Status != VariantCreationStatus.Succeeded) 
                 return result;
 
             stage = "verify saved variant";
 
-            return VerifyCreatedVariant(path, draft.BaseTemplatePrefab, draft.SourceModelPrefab, templateHash, modelHash);
+            var verified = VerifyCreatedVariant(path, draft.BaseTemplatePrefab, draft.SourceModelPrefab, templateHash, modelHash);
+            if (verified.Status != VariantCreationStatus.Succeeded) return verified;
+            stage = "verify reloaded Reference entries";
+            GameObject nested = null;
+            foreach (Transform child in verified.Asset.transform)
+                if (PrefabUtility.IsAnyPrefabInstanceRoot(child.gameObject) &&
+                    PrefabUtility.GetCorrespondingObjectFromSource(child.gameObject) == draft.SourceModelPrefab)
+                {
+                    if (nested != null) throw new InvalidOperationException("Multiple direct nested Model roots match; Reference identity is ambiguous.");
+                    nested = child.gameObject;
+                }
+            var issues = ContentReferenceAuthoring.Verify(draft, verified.Asset, nested);
+            return issues.Count == 0 ? verified : new VariantCreationResult(VariantCreationStatus.Failed,
+                "Reload Reference verification failed:\n" + string.Join("\n", issues), path);
         }
         catch (Exception ex)
         {
@@ -139,6 +158,19 @@ public static class ContentVariantCreator
     // Recheck PathOccupied immediately before saving. Never unpack or apply to the inputs.
     public static VariantCreationResult CreateVariantFromTemplate(GameObject baseTemplate, GameObject sourceModel, string outputPath)
     {
+        var draft = new ContentCreationDraft { BaseTemplatePrefab = baseTemplate, SourceModelPrefab = sourceModel,
+            References = ContentReferenceAuthoring.Inspect(baseTemplate) };
+        return CreateVariantFromTemplate(baseTemplate, sourceModel, outputPath, draft);
+    }
+
+    private static VariantCreationResult CreateVariantFromTemplate(GameObject baseTemplate, GameObject sourceModel, string outputPath,
+        ContentCreationDraft draft)
+    {
+        // Guard all entry points before folders, scenes, or instances are created.
+        var referenceIssue = ContentReferenceAuthoring.Preflight(draft);
+        if (referenceIssue != null)
+            return new VariantCreationResult(draft.References.NeedsApply && !ContentReferenceAuthoring.ApplyImplementationReady
+                ? VariantCreationStatus.NotImplemented : VariantCreationStatus.InvalidInput, referenceIssue, outputPath);
         Scene previewScene = default;
         GameObject templateInstance = null;
         GameObject modelInstance = null;
@@ -166,6 +198,8 @@ public static class ContentVariantCreator
                 throw new NullReferenceException($"Failed to instantiate prefab: {sourceModel.name}");
 
             modelInstance.transform.SetParent(templateInstance.transform, false);
+
+            ContentReferenceAuthoring.ApplyToInstance(draft, templateInstance, modelInstance);
 
             if (PathOccupied(outputPath))
                 return new VariantCreationResult(
@@ -234,7 +268,8 @@ public static class ContentVariantCreator
         string parentPath = Path.GetDirectoryName(folderPath)?.Replace("\\", "/");
         string folderName = Path.GetFileName(folderPath);
 
-        if(string.IsNullOrWhiteSpace(folderName) || !parentPath.StartsWith("Assets", StringComparison.Ordinal))
+        if(string.IsNullOrWhiteSpace(folderName) || string.IsNullOrEmpty(parentPath) ||
+            !(parentPath == "Assets" || parentPath.StartsWith("Assets/", StringComparison.Ordinal)))
         {
             throw new InvalidOperationException($"Invalid asset folder: {folderPath}");
         }

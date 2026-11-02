@@ -15,4 +15,5 @@ public class ContentCreationDraft
     public GameObject SourceModelPrefab;
     public List<SkinnedMeshRenderer> Renderers = new();
     public bool HasDiscoveredRenderers;
+    public ReferenceAuthoringDraft References = new();
 }
