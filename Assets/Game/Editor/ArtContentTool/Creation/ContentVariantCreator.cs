@@ -149,7 +149,7 @@ public static class ContentVariantCreator
         catch (Exception ex)
         {
             return new VariantCreationResult(VariantCreationStatus.Failed,
-                $"Could not {stage} at '{path}' ({ex.GetType().Name}): {ex.Message}", path);
+                $"Could not {stage} at '{path}': {ex}", path);
         }
     }
 
@@ -175,6 +175,8 @@ public static class ContentVariantCreator
         GameObject templateInstance = null;
         GameObject modelInstance = null;
         GameObject Variant = null;
+        Exception creationException = null;
+        VariantCreationResult failureResult = null;
 
         try
         {
@@ -202,7 +204,7 @@ public static class ContentVariantCreator
             ContentReferenceAuthoring.ApplyToInstance(draft, templateInstance, modelInstance);
 
             if (PathOccupied(outputPath))
-                return new VariantCreationResult(
+                return failureResult = new VariantCreationResult(
                     VariantCreationStatus.Failed,
                     $"outputPath already exit: {outputPath}",
                     outputPath);
@@ -210,21 +212,36 @@ public static class ContentVariantCreator
             Variant = PrefabUtility.SaveAsPrefabAsset(templateInstance, outputPath, out bool isSucceeded );
 
             if(Variant == null || !isSucceeded)
-                return new VariantCreationResult(
+                return failureResult = new VariantCreationResult(
                     VariantCreationStatus.Failed,
                     $"Failed to save {templateInstance.name} as prefab",
                     outputPath);
         }
+        catch (Exception ex)
+        {
+            creationException = ex;
+            throw;
+        }
         finally
         {
-            if(templateInstance != null)
-                GameObject.DestroyImmediate(templateInstance);
-
-            if(modelInstance != null)
-                GameObject.DestroyImmediate(modelInstance);
-
-            if (previewScene.IsValid())
-                EditorSceneManager.ClosePreviewScene(previewScene);
+            CleanupTemporaryResources(
+                () =>
+                {
+                    if (templateInstance != null)
+                        GameObject.DestroyImmediate(templateInstance);
+                },
+                () =>
+                {
+                    // Destroying the template normally also destroys its model child.
+                    if (modelInstance != null)
+                        GameObject.DestroyImmediate(modelInstance);
+                },
+                () =>
+                {
+                    if (previewScene.IsValid())
+                        EditorSceneManager.ClosePreviewScene(previewScene);
+                },
+                creationException, failureResult?.Message);
         }
 
 
@@ -233,6 +250,41 @@ public static class ContentVariantCreator
                 "Asset was created.",
                 outputPath,
                 Variant);
+    }
+
+    // Specific to this creator; actions allow fault-injection checks without creating assets.
+    internal static void CleanupTemporaryResources(Action destroyTemplate, Action destroyModel,
+        Action closePreviewScene, Exception creationException = null, string creationFailureMessage = null)
+    {
+        var cleanupErrors = new List<Exception>();
+        TryCleanup(destroyTemplate, "Template instance");
+        TryCleanup(destroyModel, "Model instance");
+        TryCleanup(closePreviewScene, "Preview Scene");
+
+        if (cleanupErrors.Count == 0)
+            return; // A pending creation exception continues with its original stack trace.
+
+        if (creationException != null)
+            cleanupErrors.Insert(0, creationException);
+
+        string message = "Variant temporary-resource cleanup failed.";
+        if (!string.IsNullOrEmpty(creationFailureMessage))
+            message = $"{creationFailureMessage}\n{message}";
+
+        // Preserve the original exception object/stack as the first inner exception.
+        throw new AggregateException(message, cleanupErrors);
+
+        void TryCleanup(Action cleanup, string resource)
+        {
+            try
+            {
+                cleanup();
+            }
+            catch (Exception ex)
+            {
+                cleanupErrors.Add(new InvalidOperationException($"Could not clean up {resource}.", ex));
+            }
+        }
     }
 
     public static VariantCreationResult VerifyCreatedVariant(string path, GameObject template, GameObject model,
