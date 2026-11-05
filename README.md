@@ -87,7 +87,7 @@ Excel 的**第二列作為欄名，第三列開始作為資料**；第一列不�
 
 | 欄位 | 要求 |
 | --- | --- |
-| Content Type (integer) | 32-bit 整數，包含 0；用來決定輸出資料夾，沒有內建角色／寵物類型對照。 |
+| Content Type | 下拉選擇已載入內容中出現的整數，或選 Custom integer 輸入任意 32-bit 整數，包含 0；用來決定輸出資料夾，沒有內建角色／寵物類型對照。 |
 | Content ID | 去除首尾空白後不可為空；不能包含控制字元、`<>:"/\|?*` 或結尾句點。 |
 | Base Template Prefab | Project 視窗中的 Regular／Variant Prefab 根物件，已有 `ContentPrefabReferences`。不接受 Scene instance 或 FBX Model 作為 Base Template。 |
 | Source Model Prefab | Project 中的 Regular／Variant／匯入 Model Prefab 根物件；不接受 Scene instance 或 Prefab 的子物件。 |
@@ -103,7 +103,7 @@ Excel 的**第二列作為欄名，第三列開始作為資料**；第一列不�
 
 ### 操作步驟
 
-1. 輸入 Content Type 與全新 Content ID，例如 `3`、`example_001`。
+1. 選擇 Content Type；清單沒有需要的數值時選 **Custom integer...**，再輸入全新 Content ID，例如 `3`、`example_001`。
 2. 指派 Base Template 與 Source Model。選擇 Template 後會讀取既有 Reference；Source Model 變更時會重新列出 SkinnedMeshRenderer（包含 inactive 子物件），不會自動綁定第一個 Renderer。
 3. 查看 **Reference Contract / Draft**。每個 container 顯示 Entry、Template 原值與 Inherited／Added／Override 狀態；未修改的有效值會繼承。原先指向 Template 內舊 Model 的值不會因為加入新 Model 而自動替換。
 4. 需要使用新模型時，將固定 `animator`／`mainRenderer` 的 **Value Source** 改為 **SourceModel**，再從 **Model Object** 明確選擇對應 Animator／SkinnedMeshRenderer。固定欄位可改值，但不可刪除或改 Key／Type。
@@ -148,7 +148,10 @@ Assets/Game/GeneratedContent/Type_<ContentType>/Content_<Content ID>.prefab
 - None 可以代表空值，但不代表能通過 Content Browser 對 Animator Controller、Renderer bones 等獨立的必填規則。
 - GeneratedContent 不在 Art Assets 的固定掃描目錄 `Assets/Game/Arts` 內；請以 Ping／Select 或 Project 視窗找產物。
 - 只支援既有公開 Generic Reference Contract，不編輯任意第三方 Collector，不重建 FBX 骨架／bones，也不自動配置動畫控制器。
-- 不做 Addressables Registration、Excel Export、Delete／Quarantine 或內容來源回寫。Runtime Address 面板只檢查現有註冊狀態。
+- Addressables Registration 預設 Off，可獨立建立 Prefab。開啟後選擇既有 Group、Auto／Manual Address 與既有 Labels；Variant 與 References 驗證成功後才註冊。工具保留既有 Labels、不搬移 Entry、不改名 Address、不建立 Group／Label。手動 Address 不隨 ID 改動，只有 **Use Suggested Address** 會恢復 Auto。
+- 註冊只接受 GeneratedContent 中的 Variant，定向保存目標 Group，再核對重新取得的直接 Entry 與獨立載入的序列化資料。已有 Entry 完全符合且磁碟資料一致時回傳 AlreadyRegistered，不額外保存；需要寫入而 Group 已有未保存變更時拒絕。Label 定義需先在原生介面保存。安全序列化檢查目前支援由 Group 擁有、已初始化的原生 Bundled／ContentUpdate Schema；自訂 Schema 會明確拒絕。此驗證依 Unity 6000.3.9f1／Addressables 2.8.1 驗收，升級後需重跑。
+- 註冊接線提供以原產物 GUID 與建立時 Draft 快照重試的入口；註冊失敗保留 Prefab，不重建、不搬移既有 Entry。Runtime Address 面板仍只檢查既有註冊，不代表 Catalog 已建置或 Runtime 能載入。
+- 不做 Excel Export、Delete／Quarantine 或內容來源回寫。
 - 儲存後驗證失敗時可能已留下新 Prefab，工具不會自動刪除；先檢查結果及 Console，再決定下一步。相同 ID 不可直接覆寫重試。
 - 尚無跨程序寫入鎖，請勿同時讓其他工具寫入相同輸出路徑。
 

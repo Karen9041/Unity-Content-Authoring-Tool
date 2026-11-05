@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEditor;
 using UnityEngine.UIElements;
@@ -93,7 +94,8 @@ public class ArtContentToolWindow  : EditorWindow
 
         toolbar.Add(contentButton);
         toolbar.Add(artAssetsButton);
-        toolbar.Add(new Button(CreateContentWindow.Open)
+        toolbar.Add(new Button(() => CreateContentWindow.OpenWithTypes(
+            contents.Where(record => record.Definition != null).Select(record => record.Definition.ContentType)))
         {
             text = "Create Content"
         });
