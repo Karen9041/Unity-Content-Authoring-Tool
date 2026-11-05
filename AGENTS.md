@@ -20,6 +20,49 @@
 - Keep the Generic Reference contract compatible: fixed field names/types remain stable; String and Object values use separate serialization fields. Do not resolve by name or the first matching component, and do not impose renderer-name uniqueness to avoid identity checks.
 - Apply references only to temporary instance containers, with explicit Template/SourceModel origins. Inherited references remain unchanged unless the Draft requests an override; invalid or ambiguous identity must block success.
 
+## Code Modification & Readability Rules
+
+### Minimal Changes
+
+- Prefer the smallest change that satisfies the requested behavior.
+- Preserve existing working code, public contracts, and developer-authored core logic.
+- Do not rewrite an entire method when a localized change is sufficient.
+- Do not introduce new helpers, services, abstractions, fallback paths, or defensive layers without a demonstrated need.
+- If a change requires substantial additional code, explain the reason and identify the affected behavior before expanding the implementation.
+- Prefer existing Unity and C# APIs over custom implementations.
+
+### Developer-Owned Learning Code
+
+- Treat manually implemented core methods as developer-owned learning code.
+- Preserve their control flow, variable naming, and recognizable implementation unless correctness requires changes.
+- When fixing a bug, patch the smallest affected section.
+- When changes to core logic are unavoidable, report exactly what changed and why.
+- Do not replace readable code with condensed expressions merely to reduce line count.
+
+### C# Readability
+
+- Follow the repository's `.editorconfig`.
+- Use tabs for indentation with a tab width of 4.
+- Use braces for control-flow blocks.
+- Put nested statements on separate, properly indented lines.
+- Break long conditions, method calls, and return expressions across multiple lines.
+- Prefer meaningful intermediate variables when they clarify intent.
+- Avoid dense one-line validation chains and deeply nested control flow.
+- Keep the main execution path easy to follow.
+- Use comments to explain non-obvious ownership, lifecycle, and failure behavior, not to narrate obvious statements.
+
+### Scope & Verification
+
+- Before editing, inspect the relevant existing implementation and diff.
+- Distinguish required correctness fixes from optional hardening and refactoring.
+- Limit formatting to the C# files actually involved in the task; do not format the project globally.
+- For readability cleanups, preserve evaluation order, public APIs, result contracts, and verification strength; compare observable behavior before and after.
+- Preserve existing safety invariants and tests.
+- Do not add speculative safeguards or redesign unrelated code.
+- Do not add documentation files unless explicitly requested.
+- After editing, run relevant tests and report behavior changes, remaining risks, and any intentionally deferred work.
+- Do not commit, push, or alter unrelated user changes unless explicitly requested.
+
 ## Testing
 
 For changes affecting Prefab creation or Reference Authoring, verify:
